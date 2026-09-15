@@ -2,8 +2,8 @@ import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
 dotenv.config();
 
-const isLocal = process.env.DB_HOST === '127.0.0.1' || process.env.DB_HOST === 'localhost';
-
+const isLocal =
+  process.env.DB_HOST === "127.0.0.1" || process.env.DB_HOST === "localhost";
 
 export const sequelizeInstance = new Sequelize(
   process.env.DB_NAME!,
@@ -15,9 +15,16 @@ export const sequelizeInstance = new Sequelize(
     dialect: "mysql",
     logging: false,
     dialectOptions: {
-       ssl: isLocal ? false : {
-        rejectUnauthorized: false
-      }
+      charset: "utf8mb4",
+      ssl: isLocal
+        ? false
+        : {
+            rejectUnauthorized: false,
+          },
+    },
+    define: {
+      charset: "utf8mb4",
+      collate: "utf8mb4_unicode_ci",
     },
   },
 );

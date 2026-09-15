@@ -1,61 +1,62 @@
-import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
-import { BlacklistModel } from "../../infrastructure/database/models/blacklist.model";
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { UserModel } from '../../infrastructure/database/models/user.model';
 
-export interface JwtPayload { 
-  id: number; 
-  email: string; 
-  subscriptionId: number;   
-  isGodMode: boolean;       // ✅ Asegurar que esté como boolean
-  
-  // ✅ CORRECCIÓN CRUCIAL: Definimos la estructura indexada de la matriz de permisos
-  // Permite indexar por "comp_X" y obtener el mapa de locales y roles
-  permissions: Record<string, Record<string, string[]>>; 
-}
 export interface AuthenticatedRequest extends Request {
-  user?: JwtPayload;
+  user?: {
+    id: number;
+    email: string;
+    subscriptionId: number;
+    isGodMode: boolean;
+    permissions: any;
+    activeContext?: {
+      companyId: number;
+      branchId: number;
+      role: string;
+    };
+  };
 }
 
-export async function authMiddleware(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction,
-) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res
-      .status(401)
-      .json({
-        status: "fail",
-        message: "Token faltante o inválido. Inicie sesión nuevamente.",
-      });
-  }
-
-  const token = authHeader.split(" ")[1]; // Extraemos el token limpio
-
+export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    // 1. Verificar si el token está registrado en la lista negra de MySQL
-    const isBlacklisted = await BlacklistModel.findOne({ where: { token } });
-    if (isBlacklisted) {
-      return res.status(401).json({
-        status: "fail",
-        message:
-          "Esta sesión ha sido cerrada de forma explícita. Por favor, inicie sesión nuevamente.",
-      });
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ status: 'fail', message: 'No se proporcionó un token de autenticación válido.' });
     }
 
-    // 2. Si no está en la lista negra, validar firma matemática del JWT
-    const secret = process.env.JWT_SECRET || "secret";
-    const decoded = jwt.verify(token, secret) as JwtPayload;
+    const token = authHeader.split(' ')[1]; // 👈 Extrae estrictamente la cadena hash limpia del JWT
+    const secret = process.env.JWT_SECRET || 'secret';
 
-    req.user = decoded;
+    // 1. Decodificar el Payload del token JWT
+    const decoded = jwt.verify(token, secret) as any;
+
+    // 2. 🚨 CORRECCIÓN RADICAL CONTRA EL DESPLOME DE SEQUELIZE:
+    // Al usar .unscoped() y raw: true, Sequelize ya realiza una consulta SQL plana
+    // y directa a la tabla, desactivando de forma nativa cualquier hook oculto del modelo
+    const userInDb = await UserModel.unscoped().findOne({
+      where: { id: decoded.id },
+      raw: true // ⚡ Trae el objeto plano de la RAM para máxima velocidad y anula mutaciones del ORM
+    }); 
+    
+    if (!userInDb) {
+      return res.status(401).json({ status: 'fail', message: 'El usuario asociado a este token ya no existe.' });
+    }
+
+    // 3. Guardar la metadata limpia en la memoria RAM de la petición Express
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+      subscriptionId: decoded.subscriptionId,
+      isGodMode: decoded.isGodMode || false,
+      permissions: decoded.permissions || {}, // El JSON complejo se queda viviendo aislado en RAM
+      activeContext: decoded.activeContext
+    };
+
+    // 4. 🚀 Le damos paso al controlador de menús de forma fluida
     return next();
-  } catch (error) {
-    return res
-      .status(401)
-      .json({
-        status: "fail",
-        message: "Token inválido o expirado. Inicie sesión nuevamente.",
-      });
+
+  } catch (error: any) {
+    console.error('💥 Captura de desplome en AuthMiddleware:', error.message);
+    return res.status(401).json({ status: 'fail', message: 'Token de acceso inválido o expirado.' });
   }
 }

@@ -135,7 +135,13 @@ export class EntityController {
   async getPaginated(req: AuthenticatedRequest, res: Response) {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
+
+    const {documentType, documentNumber, name, email } = req.query;
+
+
     const subscriptionId = req.user?.subscriptionId;
+
+    
 
     if (!subscriptionId)
       throw new Error("Identificador de suscripción no válido");
@@ -144,6 +150,8 @@ export class EntityController {
     const filters = {
       name: req.query.name as string,
       documentNumber: req.query.documentNumber as string,
+      documentType: documentType as string, // Encaja directo con el nuevo campo
+      email: email as string  
     };
 
     // Parámetros de ordenamiento dinámico
@@ -158,6 +166,7 @@ export class EntityController {
       limit,
       filters,
       sortInput,
+      
     });
 
     return res.status(200).json(result);

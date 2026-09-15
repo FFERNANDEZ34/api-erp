@@ -2,9 +2,12 @@ import { EntityModel } from "../../../infrastructure/database/models/entity.mode
 import { Op } from "sequelize";
 import { OrderItem } from "sequelize";
 
+// 🌟 AMPLIAMOS LA INTERFAZ: Registramos de forma estricta los nuevos campos de filtrado
 export interface EntityFilters {
   name?: string;
   documentNumber?: string;
+  documentType?: string; // 📁 Añadido: dni, ruc, etc.
+  email?: string;        // 📧 Añadido: canal de contacto
 }
 
 export interface EntitySort {
@@ -30,14 +33,26 @@ export class GetEntitiesPaginatedUseCase {
       subscriptionId: params.subscriptionId, // 🔒 Seguridad SaaS obligatoria
     };
 
-    if (params.filters.name?.trim()) {
+    
+
+     if (params.filters.name && params.filters.name.trim().length > 0) {
       whereClause.name = { [Op.like]: `%${params.filters.name.trim()}%` };
     }
-    if (params.filters.documentNumber?.trim()) {
+    
+    if (params.filters.documentNumber && params.filters.documentNumber.trim().length > 0) {
       whereClause.documentNumber = {
         [Op.like]: `%${params.filters.documentNumber.trim()}%`,
       };
     }
+
+    if (params.filters.documentType && params.filters.documentType.trim().length > 0) {
+      whereClause.documentType = params.filters.documentType.trim().toLowerCase();
+    }
+
+    if (params.filters.email && params.filters.email.trim().length > 0) {
+      whereClause.email = { [Op.like]: `%${params.filters.email.trim()}%` };
+    }
+    
 
     // 2. Validar y Sanitizar Ordenamiento (White-listing)
     const allowedFields = ["id", "name", "entityType", "createdAt"];
@@ -47,10 +62,10 @@ export class GetEntitiesPaginatedUseCase {
       ? params.sortInput.field
       : "id";
 
-    const order = allowedOrders.includes(
-      params.sortInput.order?.toUpperCase() || "",
-    )
-      ? params.sortInput.order?.toUpperCase()
+    // Unificamos el ordenamiento convirtiendo la cadena a mayúsculas
+    const orderInputUpper = params.sortInput.order?.toUpperCase() || "";
+    const order = allowedOrders.includes(orderInputUpper)
+      ? orderInputUpper
       : "ASC";
 
     // 3. Ejecutar consulta en la Base de Datos a través del Modelo
@@ -59,7 +74,6 @@ export class GetEntitiesPaginatedUseCase {
       limit: sanitizedLimit,
       offset: offset,
       order: [[field, order]] as OrderItem[],
-      //raw: true,
     });
 
     return {

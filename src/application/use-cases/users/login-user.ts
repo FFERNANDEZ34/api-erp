@@ -1,36 +1,50 @@
-import { UserModel } from '../../../infrastructure/database/models/user.model';
-import { UserCompanyRoleModel } from '../../../infrastructure/database/models/user-company-role.model';
-import { RoleModel } from '../../../infrastructure/database/models/role.model';
-import { CompanyModel } from '../../../infrastructure/database/models/company.model';
-import { BranchWarehouseModel } from '../../../infrastructure/database/models/branch-warehouse.model';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { UserModel } from "../../../infrastructure/database/models/user.model";
+import { UserCompanyRoleModel } from "../../../infrastructure/database/models/user-company-role.model";
+import { CompanyModel } from "../../../infrastructure/database/models/company.model";
+import { BranchWarehouseModel } from "../../../infrastructure/database/models/branch-warehouse.model";
+import { RoleModel } from "../../../infrastructure/database/models/role.model";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+
+interface CompanyPermission {
+  name: string;
+  branches: { [branchKey: string]: { name: string; roles: string[] } };
+}
 
 export class LoginUserUseCase {
   async execute(email: string, passwordUnsecured: string) {
-    // 1. Validar la existencia del usuario base
     const user = await UserModel.findOne({ where: { email } });
-    if (!user) throw new Error('Credenciales incorrectas');
+    if (!user)
+      throw new Error(
+        "Credenciales incorrectas: El correo electrónico no está registrado.",
+      );
 
-    // 2. Validar la contraseña encriptada
-    const isPasswordValid = await bcrypt.compare(passwordUnsecured, user.password);
-    if (!isPasswordValid) throw new Error('Credenciales incorrectas');
+    const isPasswordValid = await bcrypt.compare(
+      passwordUnsecured,
+      user.password,
+    );
+    if (!isPasswordValid)
+      throw new Error("Credenciales incorrectas: La contraseña es inválida.");
 
-    // 3. Consultar la Matriz de Permisos (Intersección de Compañías, Locales y Roles)
+    // Jalamos todas las asignaciones incluyendo el flag isDefault de la tabla intermedia
     const userAssignments = await UserCompanyRoleModel.findAll({
       where: { userId: user.id },
       include: [
-        { model: CompanyModel, attributes: ['id', 'name'] },
-        { model: BranchWarehouseModel, attributes: ['id', 'name'] },
-        { model: RoleModel, attributes: ['id', 'name'] }
+        { model: CompanyModel, attributes: ["name"] },
+        { model: BranchWarehouseModel, attributes: ["name"] },
+        { model: RoleModel, attributes: ["name"] },
       ],
-      raw: true, // Optimización de rendimiento para traer datos planos ultra livianos
-      nest: true // Estructura los objetos anidados de Sequelize limpiamente
+      raw: true,
+      nest: true,
     });
 
-    // 4. Compilar los permisos de forma dinámica en un objeto indexado por Compañía y Local
-    // Estructura resultante: { "comp_1": { "branch_1": ["super-admin", "cajero"] } }
-    const permissionsMatrix: Record<string, Record<string, string[]>> = {};
+    const permissionsMatrix: Record<string, CompanyPermission> = {};
+
+    // Variables para capturar el contexto que tenga isDefault = 1
+    let defaultCompanyId = 0;
+    let defaultBranchId = 0;
+    let defaultRoleName = "";
+    let foundExplicitDefault = false; 
 
     userAssignments.forEach((assignment: any) => {
       const compKey = `comp_${assignment.companyId}`;
@@ -38,40 +52,73 @@ export class LoginUserUseCase {
       const roleName = assignment.RoleModel.name;
 
       if (!permissionsMatrix[compKey]) {
-        permissionsMatrix[compKey] = {};
+        permissionsMatrix[compKey] = {
+          name: assignment.CompanyModel.name,
+          branches: {},
+        };
       }
-      if (!permissionsMatrix[compKey][branchKey]) {
-        permissionsMatrix[compKey][branchKey] = [];
+      if (!permissionsMatrix[compKey].branches[branchKey]) {
+        permissionsMatrix[compKey].branches[branchKey] = {
+          name: assignment.BranchWarehouseModel.name,
+          roles: [],
+        };
       }
-      
-      // Añadimos el rol evitando duplicados conceptuales
-      if (!permissionsMatrix[compKey][branchKey].includes(roleName)) {
-        permissionsMatrix[compKey][branchKey].push(roleName);
+      if (
+        !permissionsMatrix[compKey].branches[branchKey].roles.includes(roleName)
+      ) {
+        permissionsMatrix[compKey].branches[branchKey].roles.push(roleName);
+      }
+
+      // 🎯 ¡LA MAGIA AQUÍ!: Si este registro es el marcado por defecto en MySQL, guardamos sus IDs
+       // 🎯 ENTRADA MATEMÁTICA CORREGIDA:
+      // Si encontramos la fila marcada explícitamente como isDefault = 1 en MySQL, la fijamos y activamos el cerrojo.
+      // Soportamos validación dual tanto por número (1) como por booleano (true) según cómo Sequelize mapee el TINYINT.
+
+      console.log('--- ITERANDO ASIGNACIÓN ---');
+      console.log(`Empresa: ${assignment.companyId} | Local: ${assignment.branchId} | Rol: ${assignment.RoleModel?.name}`);
+      console.log(`¿isDefault crudo de la BD?:`, assignment.isDefault);
+      console.log(`Tipo de dato de isDefault:`, typeof assignment.isDefault);
+
+      if (assignment.isDefault === 1 || assignment.isDefault === true) {
+        defaultCompanyId = assignment.companyId;
+        defaultBranchId = assignment.branchId;
+        defaultRoleName = roleName;
+        foundExplicitDefault = true; // ACTIVAMOS EL CERROJO COPTURADO
+      } 
+      // Fallback: Si todavía no hemos encontrado el isDefault explícito, asignamos la primera opción temporalmente
+      else if (!foundExplicitDefault && defaultCompanyId === 0) {
+        defaultCompanyId = assignment.companyId;
+        defaultBranchId = assignment.branchId;
+        defaultRoleName = roleName;
       }
     });
 
-    // 5. Determinar si el usuario tiene super-poderes (Si es el ID 1 y es la suscripción fundadora)
-    // Esto le da un bypass o "isGodMode" para interactuar como Administrador Maestro del Holding
-    const isMasterAdmin = user.id === 1;
+    const secret = process.env.JWT_SECRET || "secret";
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || "refresh_secret";
 
-    // 6. Generar los Tokens de Seguridad (Access Token de 30 minutos)
-    const secret = process.env.JWT_SECRET || 'secret';
-    
     const accessToken = jwt.sign(
       {
         id: user.id,
         email: user.email,
         subscriptionId: user.subscriptionId,
-        isGodMode: isMasterAdmin,
-        permissions: permissionsMatrix // 🔥 Inyección de la matriz agnóstica de permisos
+        isGodMode: user.id === 1,
+        permissions: permissionsMatrix,
+        // 🔥 INYECTAMOS EL CONTEXTO POR DEFECTO AUTOMÁTICO
+        activeContext: {
+          companyId: defaultCompanyId,
+          branchId: defaultBranchId,
+          role: defaultRoleName,
+        },
       },
       secret,
-      { expiresIn: '15m' }
+      { expiresIn: "15m" },
     );
 
-    // 7. Generar y almacenar el Refresh Token de larga duración (7 días)
-    const refreshToken = jwt.sign({ id: user.id }, secret, { expiresIn: '7d' });
-    await user.update({ refreshToken });
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      refreshSecret,
+      { expiresIn: '7d' }
+    );
 
     return {
       accessToken,
@@ -79,8 +126,8 @@ export class LoginUserUseCase {
       user: {
         id: user.id,
         email: user.email,
-        subscriptionId: user.subscriptionId
-      }
+        subscriptionId: user.subscriptionId,
+      },
     };
   }
 }

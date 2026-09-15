@@ -1,76 +1,96 @@
-import { RoleMenuPermissionModel } from "../../../infrastructure/database/models/role-menu-permission.model";
-import { MenuOptionModel } from "../../../infrastructure/database/models/menu-option.model";
-import { RoleModel } from "../../../infrastructure/database/models/role.model";
-import { Op } from "sequelize";
-
-interface MenuNode {
-  id: number;
-  parentId: number | null;
-  title: string;
-  icon: string | null;
-  path: string | null;
-  children: MenuNode[];
-}
+import { RoleMenuPermissionModel } from '../../../infrastructure/database/models/role-menu-permission.model';
+import { MenuOptionModel } from '../../../infrastructure/database/models/menu-option.model';
+import { RoleModel } from '../../../infrastructure/database/models/role.model';
 
 export class GetAssignedMenuUseCase {
-  async execute(
-    subscriptionId: number,
-    roleNames: string[],
-  ): Promise<MenuNode[]> {
-    // 1. Si el usuario es super-admin global de la suscripción, se le da acceso a TODO el catálogo plano de menús
-    let menuOptionsPlain: any[] = [];
+ 
+  async execute(data: { subscriptionId: number; permissionsMatrix: any; companyId: number; branchId: number; roleName?: string }) {
+    
+    const companyKey = `comp_${data.companyId}`;
+    const branchKey = `branch_${data.branchId}`;
 
-    if (roleNames.includes("super-admin")) {
-      menuOptionsPlain = await MenuOptionModel.findAll({
-        order: [["orderIndex", "ASC"]],
-        raw: true,
-      });
-    } else {
-      // 2. Si es empleado común, se buscan las opciones asignadas específicamente a sus roles en su Tenant
-      const roles = await RoleModel.findAll({
-        where: { name: { [Op.in]: roleNames } },
-      });
-      const roleIds = roles.map((r) => r.id);
+    const companyData = data.permissionsMatrix?.[companyKey] || { branches: {} };
+    const branchesMap = companyData.branches || {};
+    const branchData = branchesMap[branchKey] || { roles: [] };
+    const assignedRoles: string[] = branchData.roles || [];
 
-      const permissions = await RoleMenuPermissionModel.findAll({
-        where: { subscriptionId, roleId: { [Op.in]: roleIds } },
-        include: [{ model: MenuOptionModel }],
-        raw: true,
-        nest: true,
-      });
+    if (assignedRoles.length === 0) return [];
 
-      // Extraer y eliminar duplicados de opciones en memoria si el empleado tiene múltiples roles
-      const uniqueOptionsMap = new Map<number, any>();
+    // 🎯 ¡LA MAGIA DE AISLAMIENTO AQUÍ!:
+    // Si el frontend nos envía un rol seleccionado específico, usamos ese.
+    // Si no viene, usamos por defecto el primero que encuentre para no romper el arranque.
+    const activeRoleToFilter = data.roleName && assignedRoles.includes(data.roleName) 
+      ? data.roleName 
+      : assignedRoles[0];
 
-      permissions.forEach((p: any) => {
-        // 💡 CORRECCIÓN: Sequelize anida los datos usando el alias de la relación en minúsculas/camelCase.
-        // Intentaremos leer 'menu_option' o 'MenuOptionModel' de forma segura.
-        const menuOption = p.MenuOptionModel || p.menu_option;
+    // 1. Buscar ÚNICAMENTE el ID numérico del perfil activo (Evita mezclar super-admin con supervisor)
+    const rolesInDb = await RoleModel.findAll({
+      where: { name: activeRoleToFilter }, // 👈 Cambiado de 'assignedRoles' (Arreglo) a 'activeRoleToFilter' (String plano)
+      raw: true
+    });
+    const roleIds = rolesInDb.map(r => r.id);
 
-        if (menuOption && menuOption.id) {
-          uniqueOptionsMap.set(menuOption.id, menuOption);
+    if (roleIds.length === 0) return [];
+
+    // 2. Buscar relaciones en role_menu_permissions usando CamelCase
+    const allowedPermissions = await RoleMenuPermissionModel.findAll({
+      where: {
+        subscriptionId: data.subscriptionId,
+        roleId: roleIds // 👈 Filtrará estrictamente por el ID del rol seleccionado
+      },
+      raw: true
+    });
+
+    const menuOptionIds = allowedPermissions.map((p: any) => p.menuOptionId).filter(Boolean);
+
+    if (menuOptionIds.length === 0) return [];
+
+    // 3. Jalar físicamente las opciones autorizadas del Catálogo Maestro
+    const dbMenuOptions = await MenuOptionModel.findAll({
+      where: { id: menuOptionIds },
+      raw: true
+    });
+
+    // 4. Aplanar el payload para evitar desajustes de prefijos en Angular
+    const flatMenuOptions = dbMenuOptions.map((option: any) => {
+      return {
+        id: option.id,
+        parentId: option.parentId !== undefined ? option.parentId : (option.parent_id || null),
+        title: option.title,
+        icon: option.icon,
+        path: option.path
+      };
+    });
+
+    return this.buildMenuTree(flatMenuOptions);
+  }
+
+  private buildMenuTree(options: any[]): any[] {
+    const cache: Record<number, any> = {};
+    const rootNodes: any[] = [];
+    const uniqueOptions = Array.from(new Map(options.map(item => [item.id, item])).values());
+
+    uniqueOptions.forEach(opt => {
+      cache[opt.id] = { ...opt, children: [] };
+    });
+
+    uniqueOptions.forEach(opt => {
+      const mappedNode = cache[opt.id];
+      if (!mappedNode) return;
+      
+      const pId = mappedNode.parentId;
+      if (pId === null || pId === undefined) {
+        rootNodes.push(mappedNode);
+      } else {
+        const parent = cache[pId];
+        if (parent) {
+          parent.children.push(mappedNode);
+        } else {
+          rootNodes.push(mappedNode);
         }
-      });
+      }
+    });
 
-      menuOptionsPlain = Array.from(uniqueOptionsMap.values()).sort(
-        (a, b) => a.orderIndex - b.orderIndex,
-      );
-    }
-
-    // 3. ALGORITMO RECURSIVO: Construir el árbol jerárquico infinito (Padres -> Hijos -> Nietos)
-    const buildTree = (parentId: number | null): MenuNode[] => {
-      return menuOptionsPlain
-        .filter((item) => item.parentId === parentId)
-        .map((item) => ({
-          id: item.id,
-          parentId: item.parentId,
-          title: item.title,
-          icon: item.icon,
-          path: item.path,
-          children: buildTree(item.id), // 🔄 Llamada recursiva hacia los hijos/nietos
-        }));
-    };
-
-    return buildTree(null); // Retorna los nodos raíz (los que no tienen parentId)
+    return rootNodes;
   }
 }

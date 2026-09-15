@@ -9,8 +9,9 @@ export class UserCompanyRoleModel extends Model {
   declare subscriptionId: number;
   declare userId: number;
   declare companyId: number;
-  declare branchId: number; // 👈 Agregado
+  declare branchId: number;
   declare roleId: number;
+  public isDefault!: number;
 }
 
 UserCompanyRoleModel.init(
@@ -21,6 +22,12 @@ UserCompanyRoleModel.init(
     companyId: { type: DataTypes.INTEGER, allowNull: false },
     branchId: { type: DataTypes.INTEGER, allowNull: false }, // 👈 Agregado
     roleId: { type: DataTypes.INTEGER, allowNull: false },
+    isDefault: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+      defaultValue: 0,
+      field: "isDefault", // 💡 Ponle 'is_default' si en tu MySQL la columna usa guión bajo
+    },
   },
   {
     sequelize: sequelizeInstance,

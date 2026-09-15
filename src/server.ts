@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+import cors from 'cors'; 
 
 import { userRouter } from "./presentation/http/routes/user.routes";
 import { errorMiddleware } from "./presentation/middlewares/error.middleware";
@@ -11,7 +12,16 @@ import { sequelizeInstance } from "./infrastructure/database/sequelize.config";
 dotenv.config();
 
 const app = express();
+
+app.use(cors({
+  origin: 'http://localhost:4200', // Permite que tu Angular se conecte
+  credentials: true
+}));
+
 app.use(express.json());
+
+
+
 
 // Endpoints base
 app.use('/api/auth', userRouter);
@@ -30,7 +40,9 @@ async function bootstrap() {
     await sequelizeInstance.authenticate();
     console.log('✅ Conexión a MySQL establecida correctamente.');
 
-    
+    await sequelizeInstance.sync({ alter: false, force: false });
+    console.log('📦 Modelos y Catálogos de Sequelize sincronizados en la RAM.');
+
 
     app.listen(PORT, () => {
       console.log(`🚀 Servidor ejecutándose en http://localhost:${PORT}`);
