@@ -1,19 +1,30 @@
-import { Router } from 'express';
-import { CreateCompanyUseCase } from '../../../application/use-cases/companies/create-company';
-import { CompanyController } from '../controllers/company.controller';
-import { authMiddleware } from '../../middlewares/auth.middleware';
-import { catchAsync } from '../../middlewares/async-handler.middleware';
+import { Router } from "express";
+import { CompanyController } from "../controllers/company.controller";
+import { CreateCompanyUseCase } from "../../../application/use-cases/companies/create-company";
+import { GetCompaniesUseCase } from "../../../application/use-cases/companies/get-companies";
+import { UpdateCompanyUseCase } from "../../../application/use-cases/companies/update-company";
+import { DeleteCompanyUseCase } from "../../../application/use-cases/companies/delete-company";
+import { authMiddleware } from "../../middlewares/auth.middleware";
+import { checkExchangeRateMiddleware } from "../../middlewares/check-exchange-rate.middleware";
 
 const companyRouter = Router();
 
-// Instanciamos el caso de uso y el controlador
 const createCompanyUseCase = new CreateCompanyUseCase();
-const companyController = new CompanyController(createCompanyUseCase);
+const getCompaniesUseCase = new GetCompaniesUseCase();
+const updateCompanyUseCase = new UpdateCompanyUseCase();
+const deleteCompanyUseCase = new DeleteCompanyUseCase();
 
-// Forzamos a que todas las rutas de compañías requieran estar logueado
-companyRouter.use(authMiddleware);
+const companyController = new CompanyController(
+  createCompanyUseCase,
+  getCompaniesUseCase,
+  updateCompanyUseCase,
+  deleteCompanyUseCase
+);
 
-// Endpoint para crear las compañías de la suscripción (Máximo 3)
-companyRouter.post('/', catchAsync((req: any, res: any) => companyController.create(req, res)));
+// Mapeado físico de Endpoints protegidos por Sesión y Candado de Tipo de Cambio
+companyRouter.post("/", authMiddleware, checkExchangeRateMiddleware, (req: any, res: any) => companyController.create(req, res));
+companyRouter.get("/", authMiddleware, checkExchangeRateMiddleware, (req: any, res: any) => companyController.getPaginated(req, res));
+companyRouter.put("/:id", authMiddleware, checkExchangeRateMiddleware, (req: any, res: any) => companyController.update(req, res));
+companyRouter.delete("/:id", authMiddleware, checkExchangeRateMiddleware, (req: any, res: any) => companyController.delete(req, res));
 
 export { companyRouter };

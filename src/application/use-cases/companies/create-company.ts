@@ -1,39 +1,37 @@
-import { CompanyModel } from "../../../infrastructure/database/models/company.model";
+import { CompanyModel } from '../../../infrastructure/database/models/company.model';
+
+export interface CreateCompanyInput {
+  subscriptionId: number;
+  ruc: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}
 
 export class CreateCompanyUseCase {
-  async execute(data: { 
-    subscriptionId: number; 
-    userCompanyId: number | null; 
-    userRole: string; // 👈 Asegúrate de que esta línea esté presente
-    name: string; 
-    ruc: string; 
-  }) {
-    // 🔒 Control de seguridad: Si no es el dueño principal, se rechaza
-    if (data.userCompanyId !== null || data.userRole !== 'admin') {
-      throw new Error('Operación denegada: Solo el administrador principal de la suscripción puede crear compañías.');
-    }
+  async execute(data: CreateCompanyInput) {
+    const cleanRuc = data.ruc.trim();
 
-    if (!/^\d{11}$/.test(data.ruc))
-      throw new Error("El RUC debe tener exactamente 11 dígitos.");
-
-    const rucExists = await CompanyModel.findOne({ where: { ruc: data.ruc } });
-    if (rucExists)
-      throw new Error("Este RUC ya está registrado en el sistema.");
-
-    // Validar límite estricto de la demo
-    const companiesCount = await CompanyModel.count({
-      where: { subscriptionId: data.subscriptionId },
+    // 🛡️ Validar si ya existe el RUC registrado para este holding específico
+    const existingCompany = await CompanyModel.findOne({
+      where: { subscriptionId: data.subscriptionId, ruc: cleanRuc }
     });
-    if (companiesCount >= 3) {
-      throw new Error(
-        "Límite alcanzado: Su suscripción Demo solo permite registrar un máximo de 3 compañías.",
-      );
+
+    if (existingCompany) {
+      throw new Error(`El RUC ${cleanRuc} ya se encuentra registrado en el catálogo de su holding.`);
     }
 
-    return await CompanyModel.create({
+    const newCompany = await CompanyModel.create({
       subscriptionId: data.subscriptionId,
-      name: data.name,
-      ruc: data.ruc,
+      ruc: cleanRuc,
+      name: data.name.trim(),
+      address: data.address?.trim() || null,
+      phone: data.phone?.trim() || null,
+      email: data.email?.trim() || null,
+      isActive: true // Nace activa por defecto
     });
+
+    return newCompany.get({ plain: true });
   }
 }

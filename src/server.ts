@@ -8,6 +8,10 @@ import { companyRouter } from './presentation/http/routes/company.routes'; // �
 import { entityRouter } from './presentation/http/routes/entity.routes'; // 👈 Importar
 import { menuRouter } from './presentation/http/routes/menu.routes'; 
 import { sequelizeInstance } from "./infrastructure/database/sequelize.config";
+import { productRouter } from './presentation/http/routes/product.routes';
+import { exchangeRouter } from './presentation/http/routes/exchange.routes'; 
+import { checkExchangeRateMiddleware } from './presentation/middlewares/check-exchange-rate.middleware'; 
+import { authMiddleware } from "./presentation/middlewares/auth.middleware"; 
 
 dotenv.config();
 
@@ -22,12 +26,17 @@ app.use(express.json());
 
 
 
-
-// Endpoints base
+// A. Rutas exentas de candado interno (Necesarias para arrancar el sistema)
 app.use('/api/auth', userRouter);
-app.use('/api/entities', entityRouter); // El catálogo compartido de personas/empresas
-app.use('/api/companies', companyRouter); // 👈 NUEVO: Registro de las 3 compañías con RUC
-app.use('/api/menus', menuRouter);
+app.use('/api/menus', authMiddleware, menuRouter);
+app.use('/api/exchanges', exchangeRouter); // Libre de candado interno para poder registrar la cotización
+
+// B. Rutas operativas transaccionales blindadas por la Matriz de Divisas
+// Al poner 'authMiddleware' ANTES de 'checkExchangeRateMiddleware', garantizamos que exista req.user
+app.use('/api/entities', authMiddleware, checkExchangeRateMiddleware, entityRouter); 
+app.use('/api/companies', authMiddleware, checkExchangeRateMiddleware, companyRouter); 
+app.use('/api/products', authMiddleware, checkExchangeRateMiddleware, productRouter);
+
 
 // Manejador centralizado de errores
 app.use(errorMiddleware);

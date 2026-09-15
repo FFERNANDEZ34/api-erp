@@ -16,7 +16,7 @@ export class RefreshTokenUseCase {
       if (!user || user.id !== decoded.id) throw new Error('Token no autorizado');
 
       // 3. Generar un nuevo Access Token de 15 minutos
-      const newAccessToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, secret, { expiresIn: '15m' });
+      const newAccessToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, secret, { expiresIn: '5m' });
 
       return { accessToken: newAccessToken };
     } catch {

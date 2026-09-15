@@ -111,7 +111,7 @@ export class LoginUserUseCase {
         },
       },
       secret,
-      { expiresIn: "15m" },
+      { expiresIn: "5m" },
     );
 
     const refreshToken = jwt.sign(
