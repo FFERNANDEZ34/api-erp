@@ -101,7 +101,7 @@ export class SwitchContextUseCase {
         }
       },
       secret,
-      { expiresIn: '5m' }
+      { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any }
     );
 
     return {

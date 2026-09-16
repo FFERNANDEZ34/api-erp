@@ -69,16 +69,6 @@ export class LoginUserUseCase {
         permissionsMatrix[compKey].branches[branchKey].roles.push(roleName);
       }
 
-      // 🎯 ¡LA MAGIA AQUÍ!: Si este registro es el marcado por defecto en MySQL, guardamos sus IDs
-       // 🎯 ENTRADA MATEMÁTICA CORREGIDA:
-      // Si encontramos la fila marcada explícitamente como isDefault = 1 en MySQL, la fijamos y activamos el cerrojo.
-      // Soportamos validación dual tanto por número (1) como por booleano (true) según cómo Sequelize mapee el TINYINT.
-
-      console.log('--- ITERANDO ASIGNACIÓN ---');
-      console.log(`Empresa: ${assignment.companyId} | Local: ${assignment.branchId} | Rol: ${assignment.RoleModel?.name}`);
-      console.log(`¿isDefault crudo de la BD?:`, assignment.isDefault);
-      console.log(`Tipo de dato de isDefault:`, typeof assignment.isDefault);
-
       if (assignment.isDefault === 1 || assignment.isDefault === true) {
         defaultCompanyId = assignment.companyId;
         defaultBranchId = assignment.branchId;
@@ -93,9 +83,9 @@ export class LoginUserUseCase {
       }
     });
 
-    const secret = process.env.JWT_SECRET || "secret";
-    const refreshSecret = process.env.JWT_REFRESH_SECRET || "refresh_secret";
-
+    const secret = process.env.JWT_SECRET || "aiven_clean_architecture_secret_key_2026";
+    const refreshSecret = process.env.JWT_SECRET || "aiven_clean_architecture_secret_key_2026";
+    
     const accessToken = jwt.sign(
       {
         id: user.id,
@@ -111,13 +101,13 @@ export class LoginUserUseCase {
         },
       },
       secret,
-      { expiresIn: "5m" },
+      { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any },
     );
 
     const refreshToken = jwt.sign(
       { id: user.id },
       refreshSecret,
-      { expiresIn: '7d' }
+      { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '1d') as any }
     );
 
     return {
