@@ -10,11 +10,6 @@ export async function checkExchangeRateMiddleware(
   try {
     const subscriptionId = req.user?.subscriptionId;
 
-    console.log("============ 🚨 AUDITORÍA DE CANDADO FINANCIERO ============");
-    console.log(
-      `1. Ruta detectada en la petición: ${req.originalUrl} [${req.method}]`,
-    );
-    console.log(`2. ID de Suscripción en la sesión: ${subscriptionId}`);
 
     // 1. 🛡️ BYPASS ESTRATÉGICO: Rutas exentas del candado financiero
     const openRoutes = ["/api/auth", "/api/menus", "/api/exchanges","/api/products/parameters"];
@@ -22,15 +17,9 @@ export async function checkExchangeRateMiddleware(
       req.originalUrl.startsWith(route),
     );
 
-    console.log(`3. ¿Esta ruta está exenta del bloqueo?: ${isExempt}`);
+
 
     if (isExempt || !subscriptionId) {
-      console.log(
-        "➡️ Acción: Ruta exenta o sin sesión. Dando libre tránsito (next).",
-      );
-      console.log(
-        "===========================================================",
-      );
       return next();
     }
 
@@ -43,7 +32,7 @@ export async function checkExchangeRateMiddleware(
 
     const todayStr = `${year}-${month}-${day}`; // Produce exactamente '2026-09-15'
 
-    console.log(`4. Fecha calculada del servidor: ${todayStr}`);
+    
 
     // 3. 🔍 AUDITORÍA EN TIEMPO REAL: Buscamos si el Holding ya registró cotizaciones hoy
     const exchangeExists = await CurrencyExchangeModel.findOne({
@@ -54,16 +43,10 @@ export async function checkExchangeRateMiddleware(
       raw: true,
     });
 
-    console.log(`5. ¿Existe tipo de cambio hoy en la BD?: ${!!exchangeExists}`);
+    
 
     // 4. 🚫 FRENO DE MANO ABSOLUTO: Si no hay tipo de cambio diario, bloqueamos la operación
     if (!exchangeExists) {
-      console.warn(
-        "⛔ Freno de mano activado: Bloqueando petición con código 428.",
-      );
-      console.log(
-        "===========================================================",
-      );
 
       return res.status(428).json({
         status: "fail",
@@ -73,14 +56,10 @@ export async function checkExchangeRateMiddleware(
       });
     }
 
-    console.log(
-      "🔓 Candado abierto: Tipo de cambio al día. Continuando hacia el caso de uso...",
-    );
-    console.log("===========================================================");
-
+    
     return next();
   } catch (error: any) {
-    console.error("💥 Error en el middleware:", error);
+    
     return res
       .status(500)
       .json({

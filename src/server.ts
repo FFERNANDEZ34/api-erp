@@ -4,14 +4,18 @@ import cors from 'cors';
 
 import { userRouter } from "./presentation/http/routes/user.routes";
 import { errorMiddleware } from "./presentation/middlewares/error.middleware";
-import { companyRouter } from './presentation/http/routes/company.routes'; // 👈 Importar
-import { entityRouter } from './presentation/http/routes/entity.routes'; // 👈 Importar
+import { companyRouter } from './presentation/http/routes/company.routes';
+import { entityRouter } from './presentation/http/routes/entity.routes'; 
 import { menuRouter } from './presentation/http/routes/menu.routes'; 
 import { sequelizeInstance } from "./infrastructure/database/sequelize.config";
 import { productRouter } from './presentation/http/routes/product.routes';
 import { exchangeRouter } from './presentation/http/routes/exchange.routes'; 
 import { checkExchangeRateMiddleware } from './presentation/middlewares/check-exchange-rate.middleware'; 
 import { authMiddleware } from "./presentation/middlewares/auth.middleware"; 
+import { branchRouter } from './presentation/http/routes/branch.routes'; 
+import { seriesRouter } from './presentation/http/routes/series.routes';
+import { attachmentRouter } from './presentation/http/routes/attachment.routes';
+import path from 'path';
 
 dotenv.config();
 
@@ -24,7 +28,8 @@ app.use(cors({
 
 app.use(express.json());
 
-
+//app.use('/storage', express.static(path.join(process.cwd(), 'storage')));
+ app.use(express.static(process.cwd()));
 
 // A. Rutas exentas de candado interno (Necesarias para arrancar el sistema)
 app.use('/api/auth', userRouter);
@@ -36,8 +41,9 @@ app.use('/api/exchanges', exchangeRouter); // Libre de candado interno para pode
 app.use('/api/entities', authMiddleware, checkExchangeRateMiddleware, entityRouter); 
 app.use('/api/companies', authMiddleware, checkExchangeRateMiddleware, companyRouter); 
 app.use('/api/products', authMiddleware, checkExchangeRateMiddleware, productRouter);
-
-
+app.use('/api/branches', authMiddleware, checkExchangeRateMiddleware, branchRouter); 
+app.use('/api/series', authMiddleware, checkExchangeRateMiddleware, seriesRouter); 
+app.use('/api/attachments', attachmentRouter);
 // Manejador centralizado de errores
 app.use(errorMiddleware);
 

@@ -31,7 +31,7 @@ export class CreateCompanyUseCase {
       email: data.email?.trim() || null,
       isActive: true // Nace activa por defecto
     });
-
+ 
     return newCompany.get({ plain: true });
   }
 }
