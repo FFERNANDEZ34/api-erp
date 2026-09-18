@@ -33,6 +33,8 @@ export class CreateProductUseCase {
       throw new Error('El tipo de afectación tributaria seleccionado no es válido.');
     }
 
+    
+
     // 2. 🧮 LÓGICA DE DEDUCCIÓN CONTABLE AUTOMÁTICA (IGV 18%)
     // Si el código del parámetro auxiliar contiene la palabra 'GRAVADO', extraemos el impuesto.
     // De lo contrario, el valor neto es equivalente al precio plano.
@@ -42,6 +44,21 @@ export class CreateProductUseCase {
     const purchaseValue = isGravado ? (data.purchasePrice / taxFactor) : data.purchasePrice;
     const salesValue = isGravado ? (data.salesPrice / taxFactor) : data.salesPrice;
 
+    const cleanCode = data.productCode.trim();
+    const subId = data.subscriptionId;
+
+    const existingProduct = await ProductModel.findOne({
+      where: { 
+        subscriptionId: subId, 
+        productCode: cleanCode 
+      }
+    });
+
+    // Si el radar encuentra una coincidencia, frena la transacción con un mensaje limpio
+    if (existingProduct) {
+      throw new Error(`El código de producto [${cleanCode}] ya se encuentra registrado en el catálogo de su holding.`);
+    }
+    
     // 3. Insertar de forma hermética el registro en MySQL a través de Sequelize
     const newProduct = await ProductModel.create({
       subscriptionId: data.subscriptionId,

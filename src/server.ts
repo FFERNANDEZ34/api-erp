@@ -15,6 +15,7 @@ import { authMiddleware } from "./presentation/middlewares/auth.middleware";
 import { branchRouter } from './presentation/http/routes/branch.routes'; 
 import { seriesRouter } from './presentation/http/routes/series.routes';
 import { attachmentRouter } from './presentation/http/routes/attachment.routes';
+import { invoiceRouter } from './presentation/http/routes/invoice.routes';
 import path from 'path';
 
 dotenv.config();
@@ -44,6 +45,9 @@ app.use('/api/products', authMiddleware, checkExchangeRateMiddleware, productRou
 app.use('/api/branches', authMiddleware, checkExchangeRateMiddleware, branchRouter); 
 app.use('/api/series', authMiddleware, checkExchangeRateMiddleware, seriesRouter); 
 app.use('/api/attachments', attachmentRouter);
+app.use('/api/invoices', authMiddleware, checkExchangeRateMiddleware, invoiceRouter); 
+
+
 // Manejador centralizado de errores
 app.use(errorMiddleware);
 

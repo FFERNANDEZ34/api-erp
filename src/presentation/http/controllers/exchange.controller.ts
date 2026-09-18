@@ -2,14 +2,48 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { SaveDailyExchangeUseCase } from '../../../application/use-cases/exchanges/save-daily-exchange';
 import { GetExchangeHistoryUseCase } from '../../../application/use-cases/exchanges/get-exchange-history';
+import { GetTodayExchangeUseCase } from '../../../application/use-cases/exchanges/get-today-exchange';
 import { z } from 'zod';
 
 export class ExchangeController {
   constructor(
     private readonly saveDailyExchangeUseCase: SaveDailyExchangeUseCase,
-    private readonly getExchangeHistoryUseCase: GetExchangeHistoryUseCase
+    private readonly getExchangeHistoryUseCase: GetExchangeHistoryUseCase,
+    private readonly getTodayExchangeUseCase: GetTodayExchangeUseCase,
   ) {}
 
+  async getToday(req: AuthenticatedRequest, res: Response) {
+    try {
+      // Extraemos el candado SaaS obligatorio desde el middleware de sesión
+      const subscriptionId = req.user?.subscriptionId;
+
+      if (!subscriptionId) {
+        return res.status(401).json({ 
+          status: 'fail', 
+          message: 'Acceso denegado: Sesión SaaS multi-tenant no válida.' 
+        });
+      }
+
+      // Instanciamos el caso de uso de la capa de aplicación
+      const getTodayExchangeUseCase = new GetTodayExchangeUseCase();
+      const exchangeData = await getTodayExchangeUseCase.execute(subscriptionId);
+
+      // Despachamos la respuesta con éxito total (HTTP 200)
+      return res.status(200).json({
+        status: 'success',
+        message: 'Tipo de cambio diario recuperado con éxito de MySQL.',
+        data: exchangeData
+      });
+
+    } catch (error: any) {
+      // Captura defensiva ante caídas imprevistas de base de datos
+      return res.status(500).json({ 
+        status: 'error', 
+        message: `Error interno en el servidor: ${error.message}` 
+      });
+    }
+  }
+  
   // 💾 GUARDAR O ACTUALIZAR LA MATRIZ DEL DÍA (POST)
   async saveDaily(req: AuthenticatedRequest, res: Response) {
     const exchangeSchema = z.object({

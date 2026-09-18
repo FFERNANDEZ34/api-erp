@@ -9,6 +9,9 @@ export class CompanyModel extends Model {
   declare public address: string | null;
   declare public phone: string | null;
   declare public email: string | null;
+  declare public sunatUser: string | null;          // 👈 Nuevo: Usuario SOL SECUNDARIO
+  declare public sunatPassword: string | null;      // 👈 Nuevo: Clave SOL
+  declare public certificatePassword: string | null;
   declare public isActive: boolean;
 }
 
@@ -21,6 +24,9 @@ CompanyModel.init(
     address: { type: DataTypes.STRING(255), allowNull: true },
     phone: { type: DataTypes.STRING(20), allowNull: true },
     email: { type: DataTypes.STRING(100), allowNull: true },
+    sunatUser: { type: DataTypes.STRING(50), allowNull: true },
+    sunatPassword: { type: DataTypes.STRING(100), allowNull: true },
+    certificatePassword: { type: DataTypes.STRING(100), allowNull: true },
     isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }
   },
   {

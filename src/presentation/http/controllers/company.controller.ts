@@ -4,7 +4,7 @@ import { CreateCompanyUseCase } from "../../../application/use-cases/companies/c
 import { UpdateCompanyUseCase } from "../../../application/use-cases/companies/update-company";
 import { GetCompaniesUseCase } from "../../../application/use-cases/companies/get-companies";
 import { DeleteCompanyUseCase } from "../../../application/use-cases/companies/delete-company";
-import { CompanyModel } from '../../../infrastructure/database/models/company.model'; 
+import { CompanyModel } from "../../../infrastructure/database/models/company.model";
 
 import { z } from "zod";
 
@@ -34,18 +34,19 @@ export class CompanyController {
         .email("Formato de correo electrónico institucional inválido.")
         .nullable()
         .optional(),
+      sunatUser: z.string().nullable().optional(),
+      sunatPassword: z.string().nullable().optional(),
+      certificatePassword: z.string().nullable().optional(),
     });
 
     const body = companySchema.parse(req.body);
     const subscriptionId = req.user?.subscriptionId;
 
     if (!subscriptionId) {
-      return res
-        .status(401)
-        .json({
-          status: "fail",
-          message: "No autorizado: Suscripción SaaS nula.",
-        });
+      return res.status(401).json({
+        status: "fail",
+        message: "No autorizado: Suscripción SaaS nula.",
+      });
     }
 
     const newCompany = await this.createCompanyUseCase.execute({
@@ -65,12 +66,10 @@ export class CompanyController {
     const subscriptionId = req.user?.subscriptionId;
 
     if (!subscriptionId || isNaN(companyId)) {
-      return res
-        .status(400)
-        .json({
-          status: "fail",
-          message: "Identificadores de transacción no válidos.",
-        });
+      return res.status(400).json({
+        status: "fail",
+        message: "Identificadores de transacción no válidos.",
+      });
     }
 
     // 🕵️‍♂️ CONTROL DE EXISTENCIA PREVIA: Validamos si el ID realmente existe en la BD antes de avanzar
@@ -94,6 +93,9 @@ export class CompanyController {
       address: z.string().nullable().optional(),
       phone: z.string().nullable().optional(),
       email: z.string().email().nullable().optional(),
+      sunatUser: z.string().nullable().optional(),
+      sunatPassword: z.string().nullable().optional(),
+      certificatePassword: z.string().nullable().optional(),
     });
 
     const body = updateSchema.parse(req.body);
