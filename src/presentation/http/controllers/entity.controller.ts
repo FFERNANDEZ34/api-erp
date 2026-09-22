@@ -1,18 +1,20 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware";
 import { CreateEntityUseCase } from "../../../application/use-cases/entities/create-entity";
 import { GetEntitiesPaginatedUseCase } from "../../../application/use-cases/entities/get-entities-paginated";
-import { UpdateEntityUseCase } from "../../../application/use-cases/entities/update-entity"; // 👈 Añadir
-import { DeleteEntityUseCase } from "../../../application/use-cases/entities/delete-entity"; // 👈 Añadir
+import { UpdateEntityUseCase } from "../../../application/use-cases/entities/update-entity";
+import { DeleteEntityUseCase } from "../../../application/use-cases/entities/delete-entity";
+import { ConsultPadronUseCase } from "../../../application/use-cases/entities/consult-padron";
 
 import { z } from "zod";
 
 export class EntityController {
   constructor(
     private createEntityUseCase: CreateEntityUseCase,
-    private getEntitiesPaginatedUseCase: GetEntitiesPaginatedUseCase, // 👈 Inyectado
-    private readonly updateEntityUseCase: UpdateEntityUseCase, // 👈 Inyectar
+    private getEntitiesPaginatedUseCase: GetEntitiesPaginatedUseCase,
+    private readonly updateEntityUseCase: UpdateEntityUseCase,
     private readonly deleteEntityUseCase: DeleteEntityUseCase,
+    private readonly consultPadronUseCase: ConsultPadronUseCase,
   ) {}
 
   async create(req: AuthenticatedRequest, res: Response) {
@@ -169,5 +171,27 @@ export class EntityController {
     });
 
     return res.status(200).json(result);
+  }
+
+  async consultExternalPadron(req: Request, res: Response) {
+    try {
+      const { type, number } = req.params;
+
+      // 🎯 EL AJUSTE DE ARQUITECTURA LIMPIA:
+      // Consumimos directamente la instancia inyectada por el constructor en lugar de hacer un "new" manual.
+      const result = await this.consultPadronUseCase.execute(type, number);
+
+      return res.status(200).json({
+        status: "success",
+        data: result,
+      });
+    } catch (error: any) {
+      console.error("🚨 [ERROR CONTROLADO PADRÓN]:", error.message);
+
+      return res.status(400).json({
+        status: "fail",
+        message: error.message || "Error al consultar el padrón nacional.",
+      });
+    }
   }
 }
