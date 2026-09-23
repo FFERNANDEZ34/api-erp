@@ -19,6 +19,9 @@ import { attachmentRouter } from "./presentation/http/routes/attachment.routes";
 import { invoiceRouter } from "./presentation/http/routes/invoice.routes";
 import { kardexRouter } from "./presentation/http/routes/kardex.routes";
 import { paymentRouter } from "./presentation/http/routes/payment.routes";
+import { dashboardRouter } from "./presentation/http/routes/dashboard.routes"; 
+import { securityRouter } from "./presentation/http/routes/security.routes"; 
+
 
 import path from "path";
 
@@ -94,6 +97,9 @@ app.use(
   checkExchangeRateMiddleware,
   paymentRouter,
 );
+
+app.use("/api/dashboard", authMiddleware, checkExchangeRateMiddleware, dashboardRouter); 
+app.use("/api/security", authMiddleware, checkExchangeRateMiddleware, securityRouter); 
 
 // Manejador centralizado de errores
 app.use(errorMiddleware);

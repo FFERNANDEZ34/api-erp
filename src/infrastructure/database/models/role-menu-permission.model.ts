@@ -1,20 +1,22 @@
-import { DataTypes, Model } from 'sequelize';
+import { Model, DataTypes } from 'sequelize';
 import { sequelizeInstance } from '../sequelize.config';
-import { RoleModel } from './role.model';
-import { MenuOptionModel } from './menu-option.model';
 
 export class RoleMenuPermissionModel extends Model {
-  declare id: number;
-  declare subscriptionId: number;
-  declare roleId: number;
-  declare menuOptionId: number;
+  declare public id: number;
+  declare public subscriptionId: number;
+  declare public roleId: number;
+  declare public menuOptionId: number;
+  declare public readonly createdAt: Date;
 }
+
 RoleMenuPermissionModel.init({
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
   subscriptionId: { type: DataTypes.INTEGER, allowNull: false },
   roleId: { type: DataTypes.INTEGER, allowNull: false },
-  menuOptionId: { type: DataTypes.INTEGER, allowNull: false }
-}, { sequelize: sequelizeInstance, tableName: 'role_menu_permissions', timestamps: false });
-
-RoleMenuPermissionModel.belongsTo(RoleModel, { foreignKey: 'roleId' });
-RoleMenuPermissionModel.belongsTo(MenuOptionModel, { foreignKey: 'menuOptionId' });
+  menuOptionId: { type: DataTypes.INTEGER, allowNull: false },
+  createdAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, {
+  sequelize: sequelizeInstance,
+  tableName: 'role_menu_permissions', // 🎯 Soldado a tu nombre exacto
+  timestamps: false
+});
