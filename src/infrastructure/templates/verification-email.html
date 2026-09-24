@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verificación de Cuenta</title>
+  <style>
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+    .container { max-width: 550px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e9ecef; }
+    .header { background: #212529; padding: 30px; text-align: center; }
+    .header h2 { color: #ffffff; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 1px; font-family: monospace; }
+    .content { padding: 40px 35px; color: #495057; line-height: 1.6; }
+    .content h3 { color: #212529; margin-top: 0; font-size: 18px; font-weight: 700; }
+    .content p { font-size: 14px; margin-bottom: 25px; color: #6c757d; }
+    .btn-wrapper { text-align: center; margin: 35px 0; }
+    .btn { background: #0d6efd; color: #ffffff !important; text-decoration: none; padding: 12px 35px; font-size: 13.5px; font-weight: bold; border-radius: 6px; display: inline-block; letter-spacing: 0.5px; box-shadow: 0 3px 6px rgba(13,110,253,0.15); }
+    .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 11px; color: #adb5bd; border-top: 1px solid #efefef; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>🛡️ ERP MULTI-TENANT SAAS</h2>
+    </div>
+    <div class="content">
+      <!-- 🎯 COMODINES DE REEMPLAZO DINÁMICO ASINCRONO -->
+      <h3>¡Hola, {{contactName}}!</h3>
+      <p>Gracias por registrarte en nuestra plataforma de gestión empresarial e infraestructura contable en la nube.</p>
+      <p>Para activar tu suscripción, resguardar tus entornos multi-tenant y poder iniciar sesión en el sistema, es obligatorio que verifiques tu identidad presionando el botón máster de liberación criptográfica de abajo:</p>
+      
+      <div class="btn-wrapper">
+        <a href="{{confirmationLink}}" target="_blank" class="btn">CONFIRMAR MI CORREO ELECTRÓNICO</a>
+      </div>
+
+      <p style="font-size: 12px; color: #94a3b8; margin-bottom: 0;">⚠️ Este enlace de verificación tiene una ventana de vigencia estricta de 24 horas. Si el botón no funciona, copia y pega esta URL en tu navegador: <br>{{confirmationLink}}</p>
+    </div>
+    <div class="footer">
+      <p>Este es un correo automatizado de seguridad del sistema. Por favor no lo responda.</p>
+      <p>&copy; 2026 Ecosistema ERP Enterprise. Todos los derechos reservados.</p>
+    </div>
+  </div>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { RefreshTokenUseCase } from "../../../application/use-cases/users/refres
 import { LogoutUserUseCase } from "../../../application/use-cases/users/logout-user";
 import { SubscribeCompanyUseCase } from "../../../application/use-cases/users/subscribe-company";
 import { SwitchContextUseCase } from "../../../application/use-cases/users/switch-context";
+import { ConfirmEmailUseCase } from "../../../application/use-cases/users/confirm-email"; // 🚀 1. IMPORTA TU CASO DE USO
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware";
 import { z } from "zod";
 
@@ -16,23 +17,62 @@ export class UserController {
     private readonly logoutUserUseCase: LogoutUserUseCase,
     private readonly subscribeCompanyUseCase: SubscribeCompanyUseCase,
     private readonly switchContextUseCase: SwitchContextUseCase,
+    private readonly confirmEmailUseCase: ConfirmEmailUseCase, // 🚀 2. INYECTA EN EL CONSTRUCTOR
   ) {}
 
-   async switchContext(req: AuthenticatedRequest, res: Response) {
+  // 📥 NEW API: CONFIRMACIÓN Y DESBLOQUEO DE CUENTA DESDE ANGULAR (GET /api/auth/confirm-email)
+  async confirmEmail(req: Request, res: Response) {
+    try {
+      const confirmSchema = z.object({
+        token: z
+          .string()
+          .min(
+            10,
+            "El token criptográfico proporcionado está incompleto o alterado.",
+          ),
+      });
+
+      // Validamos el query param (?token=xyz) con Zod
+      const query = confirmSchema.parse(req.query);
+
+      // Despachamos de forma limpia hacia nuestro Caso de Uso ACID
+      const result = await this.confirmEmailUseCase.execute(query.token);
+
+      return res.status(200).json({
+        status: "success",
+        ...result,
+      });
+    } catch (error: any) {
+      console.error(
+        "🚨 [ERROR EN CAPA PRESENTACIÓN - CONFIRMACIÓN EMAIL]:",
+        error.message,
+      );
+      return res.status(400).json({
+        status: "fail",
+        message:
+          error.message ||
+          "El token de confirmación ha expirado o es totalmente inválido.",
+      });
+    }
+  }
+
+  async switchContext(req: AuthenticatedRequest, res: Response) {
     const switchSchema = z.object({
       companyId: z.number().int().positive(),
       branchId: z.number().int().positive(),
-      roleName: z.string().min(2)
+      roleName: z.string().min(2),
     });
 
     const body = switchSchema.parse(req.body);
-    
+
     const userId = req.user?.id;
     const email = req.user?.email;
     const subscriptionId = req.user?.subscriptionId;
 
     if (!userId || !email || !subscriptionId) {
-      return res.status(401).json({ status: 'fail', message: 'Sesión no válida o expirada.' });
+      return res
+        .status(401)
+        .json({ status: "fail", message: "Sesión no válida o expirada." });
     }
 
     const result = await this.switchContextUseCase.execute({
@@ -41,13 +81,13 @@ export class UserController {
       subscriptionId,
       companyId: body.companyId,
       branchId: body.branchId,
-      roleName: body.roleName
+      roleName: body.roleName,
     });
 
     return res.status(200).json({
-      status: 'success',
-      message: 'Contexto de trabajo actualizado correctamente.',
-      data: result
+      status: "success",
+      message: "Contexto de trabajo actualizado correctamente.",
+      data: result,
     });
   }
 
@@ -62,7 +102,8 @@ export class UserController {
         .min(2, "El nombre de su primera compañía es obligatorio"),
       companyRuc: z
         .string()
-        .length(11, "El RUC de la compañía debe tener exactamente 11 dígitos"),
+        .length(11, "El RUC de la compañía debe tener exactamente 11 dígitos")
+        .regex(/^(10|15|17|20)\d{9}$/, "El RUC debe tener 11 dígitos numéricos y comenzar con 10, 15, 17 o 20"),
       employeeCount: z.number().min(1, "Debe registrar al menos 1 empleado"),
     });
 
@@ -88,6 +129,10 @@ export class UserController {
     });
 
     const body = loginSchema.parse(req.body);
+
+    // 🛡️ EL CONTENEDOR TRANSMITE LA INVOCACIÓN AL USE CASE REFACTORIZADO:
+    // Tu loginUserUseCase internamente consultará si isEmailConfirmed es true.
+    // Si no está confirmado, lanzará un error que Zod o tu middleware de catchAsync rebotarán al front.
     const tokens = await this.loginUserUseCase.execute(
       body.email,
       body.password,
@@ -144,15 +189,12 @@ export class UserController {
     const subscriptionId = req.user?.subscriptionId;
 
     if (!subscriptionId) {
-      return res
-        .status(401)
-        .json({
-          status: "fail",
-          message: "No autorizado: Suscripción no válida.",
-        });
+      return res.status(401).json({
+        status: "fail",
+        message: "No autorizado: Suscripción no válida.",
+      });
     }
 
-    // ✅ LLAMADO LIMPIO Y SINCRONIZADO: Despachamos solo las variables que el caso de uso requiere
     const newUser = await this.createUserUseCase.execute({
       subscriptionId: subscriptionId,
       email: validatedBody.email,
@@ -163,7 +205,7 @@ export class UserController {
     return res.status(201).json({
       status: "success",
       message:
-        "Colaborador registrado y asignado a sus respectivas compañías y locales con éxito.",
+        "Se ha despachado un enlace de verificación a su bandeja de entrada.",
       data: newUser,
     });
   }

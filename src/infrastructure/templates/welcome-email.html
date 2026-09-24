@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bienvenido al ERP</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
+    .container { max-width: 550px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e9ecef; }
+    .header { background: #198754; padding: 30px; text-align: center; } /* Verde Éxito */
+    .header h2 { color: #ffffff; margin: 0; font-size: 20px; font-family: monospace; }
+    .content { padding: 40px 35px; color: #495057; line-height: 1.6; }
+    .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 11px; color: #adb5bd; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>🚀 ¡CUENTA ACTIVADA COMPLETAMENTE!</h2>
+    </div>
+    <div class="content">
+      <h3>¡Felicidades, {{contactName}}!</h3>
+      <p>Tu dirección de correo electrónico ha sido validada con éxito absoluto en los cortafuegos Multi-tenant de nuestra plataforma.</p>
+      <p>Tu suite corporativa ya se encuentra lista y configurada en la nube de <strong>Aiven</strong>. A partir de este momento puedes acceder con total libertad a emitir comprobantes, controlar tu Kardex y auditar tus métricas financieras.</p>
+      <p>Tu identificador único de suscripción en el holding es el número: <strong style="font-family: monospace; color: #198754;">#{{subscriptionId}}</strong>.</p>
+    </div>
+    <div class="footer">
+      <p>&copy; 2026 Ecosistema ERP Enterprise. Todos los derechos reservados.</p>
+    </div>
+  </div>
+</body>
+</html>

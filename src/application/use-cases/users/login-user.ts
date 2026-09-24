@@ -26,6 +26,17 @@ export class LoginUserUseCase {
     if (!isPasswordValid)
       throw new Error("Credenciales incorrectas: La contraseña es inválida.");
 
+    // =========================================================================
+    // 🛡️ EL CORTAFUEGOS ATÓMICO DE CIBERSEGURIDAD (EMAIL CONFIRMATION)
+    // =========================================================================
+    if (!user.isEmailConfirmed) {
+      const error: any = new Error("⚠️ Su cuenta aún no ha sido verificada. Por favor, revise su correo y confirme su cuenta para poder ingresar al ERP.");
+      error.statusCode = 403; // Forbidden (Prohibido) corporativo
+      error.code = 'EMAIL_NOT_VERIFIED'; // Alias semántico para el controlador
+      throw error;
+    }
+    // =========================================================================
+
     // Jalamos todas las asignaciones incluyendo el flag isDefault de la tabla intermedia
     const userAssignments = await UserCompanyRoleModel.findAll({
       where: { userId: user.id },
@@ -73,7 +84,7 @@ export class LoginUserUseCase {
         defaultCompanyId = assignment.companyId;
         defaultBranchId = assignment.branchId;
         defaultRoleName = roleName;
-        foundExplicitDefault = true; // ACTIVAMOS EL CERROJO COPTURADO
+        foundExplicitDefault = true; // ACTIVAMOS EL CERROJO CAPTURADO
       } 
       // Fallback: Si todavía no hemos encontrado el isDefault explícito, asignamos la primera opción temporalmente
       else if (!foundExplicitDefault && defaultCompanyId === 0) {
