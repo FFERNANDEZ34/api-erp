@@ -88,6 +88,7 @@ export class SubscribeCompanyUseCase {
         {
           subscriptionId: subscription.id,
           email: emailClean,
+          name: data.contactName.toUpperCase().trim(),
           password: hashedPassword,
           isEmailConfirmed: false, // 🔒 Nace bloqueado de forma defensiva hasta confirmar correo
           emailConfirmationToken: secureToken,

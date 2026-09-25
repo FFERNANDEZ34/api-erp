@@ -128,6 +128,8 @@ export class LoginUserUseCase {
         id: user.id,
         email: user.email,
         subscriptionId: user.subscriptionId,
+        name: user.name, // 🚀 Ya viaja su nombre real para el layout
+        mustChangePassword: user.mustChangePassword
       },
     };
   }

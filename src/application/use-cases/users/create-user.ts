@@ -2,8 +2,9 @@ import { sequelizeInstance } from '../../../infrastructure/database/sequelize.co
 import { UserModel } from '../../../infrastructure/database/models/user.model';
 import { RoleModel } from '../../../infrastructure/database/models/role.model';
 import { UserCompanyRoleModel } from '../../../infrastructure/database/models/user-company-role.model';
+import { EmailService } from '../../../infrastructure/services/email.service';
 import bcrypt from 'bcrypt';
-import crypto from 'crypto'; // 🚀 Librería nativa de Node.js para criptografía de alta entropía
+import crypto from 'crypto';
 
 interface AssignmentInput {
   companyId: number;
@@ -12,43 +13,40 @@ interface AssignmentInput {
 }
 
 export class CreateUserUseCase {
-  async execute(data: { subscriptionId: number; email: string; passwordUnsecured: string; assignments: AssignmentInput[] }) {
-    const emailClean = String(data.email).trim().toLowerCase();
+  async execute(data: { subscriptionId: number; email: string; name: string; phone?: string; address?: string; passwordUnsecured: string; assignments: AssignmentInput[] }) {
+    const emailClean = data.email.trim().toLowerCase();
 
     const existing = await UserModel.findOne({ where: { email: emailClean } });
     if (existing) throw new Error('El email ya está registrado en el sistema.');
 
-    // Abrimos la transacción gestionada por Sequelize
     return await sequelizeInstance.transaction(async (t) => {
-      
       const hashedPassword = await bcrypt.hash(data.passwordUnsecured, 10);
-      
-      // 🎯 GENERACIÓN DEL TOKEN CRIPTOGRÁFICO DE VERIFICACIÓN
       const secureToken = crypto.randomBytes(32).toString('hex');
       const expirationDate = new Date();
-      expirationDate.setHours(expirationDate.getHours() + 24); // Ventana de vida: 24 horas
+      expirationDate.setHours(expirationDate.getHours() + 24);
 
-      // 1. Crear el usuario base inyectando los candados de seguridad en Aiven
+      // 1. Nace con mustChangePassword = true e isActive = true
       const newUser = await UserModel.create({
         subscriptionId: data.subscriptionId,
         email: emailClean,
+        name: data.name.toUpperCase().trim(),
+        phone: data.phone || null,
+        address: data.address || null,
         password: hashedPassword,
-        isEmailConfirmed: false, // 🔒 Nace bloqueado por defecto hasta que confirme
+        mustChangePassword: true, // 🔒 Obligatorio cambiar en su primer uso
+        isEmailConfirmed: false,
         emailConfirmationToken: secureToken,
-        tokenExpiresAt: expirationDate
+        tokenExpiresAt: expirationDate,
+        isActive: true
       }, { transaction: t });
 
-      // 2. Procesar el bucle de asignaciones dinámicas múltiples intacto
       for (const assignment of data.assignments) {
         for (const roleName of assignment.roleNames) {
-          
-          // Busca el rol o lo crea en caliente participando de la transacción
           const [role] = await RoleModel.findOrCreate({ 
             where: { name: roleName.trim().toLowerCase() },
             transaction: t
           });
 
-          // Guardar en la tabla intermedia de seguridad multi-tenant
           await UserCompanyRoleModel.create({
             subscriptionId: data.subscriptionId,
             userId: newUser.id,
@@ -59,28 +57,20 @@ export class CreateUserUseCase {
         }
       }
 
-      // 📡 RADAR NOTIFICACIONES LOCALES (Simulador de Link para tu Angular)
-    
-       // 1. Capturamos la URL base desde las variables de entorno, con un fallback defensivo
       const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
-
-      // 2. 🎯 CONSTRUCCIÓN CON AUTORIDAD Y VARIABLE DINÁMICA:
       const confirmationLink = `${frontendBaseUrl}/auth/confirm-email?token=${secureToken}`;
-    
-      console.log(`==========================================================================`);
-      console.log(`📡 [NÚCLEO NOTIFICACIONES] Correo registrado: [${emailClean}]`);
-      console.log(`🔗 Enlace de Verificación generado para Angular:`);
-      console.log(`   [${confirmationLink}]`);
-      console.log(`==========================================================================`);
 
-      // Retornamos el payload incorporando el link para pruebas rápidas de red en Postman
-      return { 
-        id: newUser.id, 
-        email: newUser.email, 
-        isEmailConfirmed: false,
-        confirmationLink, // Permite capturarlo en Postman en un segundo
-        assignments: data.assignments 
-      };
+      try {
+        const emailService = new EmailService();
+        await emailService.sendEmail(emailClean, '🔐 ACCESO CONCEDIDO: Active su cuenta de colaborador', 'verification-email.html', {
+          contactName: newUser.name,
+          confirmationLink: confirmationLink
+        });
+      } catch (emailError: any) {
+        console.error('⚠️ [FALLO DE NOTIFICACIÓN DE SUB-USUARIO]:', emailError.message);
+      }
+
+      return { id: newUser.id, email: newUser.email, name: newUser.name, confirmationLink };
     });
   }
 }

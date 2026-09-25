@@ -1,5 +1,5 @@
 import { UserModel } from "../../../infrastructure/database/models/user.model";
-import { SubscriptionModel } from '../../../infrastructure/database/models/subscription.model'; 
+import { SubscriptionModel } from "../../../infrastructure/database/models/subscription.model";
 import { Op } from "sequelize";
 import { EmailService } from "../../../infrastructure/services/email.service";
 
@@ -12,20 +12,28 @@ export class ConfirmEmailUseCase {
       `🕵️‍♂️ [PERITAJE AUTH] Validando token de liberación criptográfica...`,
     );
 
-     // 🎯 2. EL DESTRABE RELACIONAL: Declaramos el belongsTo si no se ha inicializado globalmente
+    // 🎯 2. EL DESTRABE RELACIONAL: Declaramos el belongsTo si no se ha inicializado globalmente
     if (!UserModel.associations.Subscription) {
-      UserModel.belongsTo(SubscriptionModel, { foreignKey: 'subscriptionId', as: 'Subscription' });
+      UserModel.belongsTo(SubscriptionModel, {
+        foreignKey: "subscriptionId",
+        as: "Subscription",
+      });
     }
-
 
     // Buscamos el usuario e incluimos de golpe su suscripción amarrada en Aiven
     const userRow = await UserModel.findOne({
       where: {
         emailConfirmationToken: token,
-        tokenExpiresAt: { [Op.gt]: new Date() }
+        tokenExpiresAt: { [Op.gt]: new Date() },
       },
       // Inyectamos el JOIN de infraestructura contable
-      include: [{ model: SubscriptionModel, as: 'Subscription', attributes: ['contactName'] }]
+      include: [
+        {
+          model: SubscriptionModel,
+          as: "Subscription",
+          attributes: ["contactName"],
+        },
+      ],
     });
 
     if (!userRow) {
@@ -46,9 +54,10 @@ export class ConfirmEmailUseCase {
     );
 
     try {
-        const rawUser = userRow.toJSON() as any; 
+      const rawUser = userRow.toJSON() as any;
 
-         const realContactName = rawUser.Subscription?.contactName || 'Empresario SaaS';
+      //const realContactName = rawUser.Subscription?.contactName || 'Empresario SaaS';
+      const realContactName = userRow.name || "Colaborador ERP";
 
       const emailService = new EmailService();
       await emailService.sendEmail(
