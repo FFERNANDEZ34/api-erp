@@ -26,7 +26,7 @@ export class EmailService {
    */
   async sendEmail(to: string, subject: string, templateName: string, context: Record<string, string | number>): Promise<boolean> {
     const fromName = process.env.SMTP_FROM_NAME || 'SaaS ERP Platform';
-    const fromEmail = process.env.SMTP_USER;
+    const fromEmail = process.env.SMTP_FROM;
 
     try {
       // 📂 1. Armamos la ruta física apuntando al archivo dinámico solicitado

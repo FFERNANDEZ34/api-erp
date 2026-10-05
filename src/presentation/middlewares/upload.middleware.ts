@@ -37,3 +37,25 @@ export const uploadVoucherMiddleware = multer({
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 } // Tope máximo de 5MB por voucher
 });
+
+
+// =========================================================================
+// ☁️ NUEVA INYECCIÓN CLOUD: MIDDLEWARE EN MEMORIA RAM PARA CLOUDFLARE R2
+// Admite imágenes y documentos de facturación (XML, PDF, ZIP, RAR) de hasta 10MB
+// =========================================================================
+const cloudFileFilter = (req: any, file: any, cb: any) => {
+  // Permitimos imágenes, documentos oficiales XML, constancias CDR (ZIP/RAR) y PDFs
+  const allowedExtensions = /jpeg|jpg|png|webp|pdf|xml|zip|rar/;
+  const extName = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
+  
+  if (extName) {
+    return cb(null, true);
+  }
+  cb(new Error('Formato denegado para Cloudflare R2. Solo se permiten imágenes, PDFs, XMLs o archivos comprimidos ZIP/RAR.'));
+};
+
+export const uploadMemoryMiddleware = multer({
+  storage: multer.memoryStorage(), // 🎯 Captura en RAM para transferir directo a R2
+  fileFilter: cloudFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 } // 🔒 Tope de seguridad: Máximo 10MB para XMLs/ZIPs grandes
+});

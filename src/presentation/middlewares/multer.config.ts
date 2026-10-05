@@ -35,8 +35,30 @@ const fileFilter = (req: any, file: any, cb: any) => {
   }
 };
 
+// =========================================================================
+// ☁️ CONFIGURACIÓN DE MEMORIA RAM PARA CLOUDFLARE R2 (ATTACHMENTS GLOBAL)
+// Soporta imágenes, documentos XML de la SUNAT, PDFs y archivos ZIP/RAR de hasta 10MB
+// =========================================================================
+const cloudFileFilter = (req: any, file: any, cb: any) => {
+  const allowedExtensions = /jpeg|jpg|png|webp|pdf|xml|zip|rar|pfx|p12/;
+  const extName = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
+  
+  if (extName) {
+    return cb(null, true);
+  }
+  cb(new Error('Formato denegado. Solo se permiten imágenes, PDFs, XMLs o archivos comprimidos ZIP/RAR para Cloudflare R2.'));
+};
+
+// export const uploadAttachmentMiddleware = multer({
+//   storage: storage,
+//   fileFilter: fileFilter,
+//   limits: { fileSize: 10 * 1024 * 1024 } // Límite defensivo de 10MB
+// });
+
+
+
 export const uploadAttachmentMiddleware = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 } // Límite defensivo de 10MB
+  storage: multer.memoryStorage(), // 🎯 Captura el binario en RAM sin escribir basura local en tu disco
+  fileFilter: cloudFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 } // Límite defensivo: Máximo 10MB por archivo
 });
