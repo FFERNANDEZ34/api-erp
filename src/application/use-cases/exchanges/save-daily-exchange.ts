@@ -1,5 +1,6 @@
 import { CurrencyExchangeModel } from '../../../infrastructure/database/models/currency-exchange.model';
 import { AuxiliaryParameterModel } from '../../../infrastructure/database/models/auxiliary-parameter.model';
+import { Op } from 'sequelize'; // 🚀 1. IMPORTACIÓN OBLIGATORIA PARA EL FILTRO CRUZADO OR
 
 export interface ExchangeRateInput {
   currencyParamId: number;
@@ -20,17 +21,31 @@ export class SaveDailyExchangeUseCase {
 
     // Procesamos en bucle cada moneda extranjera enviada desde la matriz del frontend
     for (const rate of rates) {
-      // 1. Validar que la moneda extranjera exista legítimamente en el catálogo paramétrico
+      
+      // =========================================================================
+      // 🎯 PASO 1: RE-CALIBRACIÓN CROSS-TENANT DE VALIDACIÓN DE PARÁMETROS
+      // Validar que la moneda extranjera exista legítimamente en el catálogo paramétrico
+      // =========================================================================
       const paramExists = await AuxiliaryParameterModel.findOne({
-        where: { id: rate.currencyParamId, subscriptionId, parameterType: 'MONEDA' },
+        where: { 
+          id: rate.currencyParamId, 
+          parameterType: 'MONEDA',
+          // 🔌 EL DESTRABE: Habilitamos monedas universales (NULL) o las de su propia cuenta
+          [Op.or]: [
+            { subscriptionId: null },
+            { subscriptionId: subscriptionId }
+          ]
+        },
         raw: true
       });
 
       if (!paramExists) {
         throw new Error(`La divisa con ID ${rate.currencyParamId} no es válida para su holding.`);
       }
+      // =========================================================================
 
       // 2. 🚀 OPERACIÓN UPSERT ATÓMICA: Buscamos si ya existe registro para esa fecha y moneda
+      // Mantiene el aislamiento estricto por subscriptionId para que cada inquilino guarde sus propias tasas del día
       const [record, created] = await CurrencyExchangeModel.findOrCreate({
         where: {
           subscriptionId,

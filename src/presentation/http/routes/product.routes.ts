@@ -7,6 +7,8 @@ import { DeleteProductUseCase } from "../../../application/use-cases/products/de
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model"; // Ajusta la ruta
 
+import { Op } from 'sequelize';
+
 const productRouter = Router();
 
 
@@ -30,10 +32,23 @@ productRouter.get("/parameters", authMiddleware, async (req: any, res: any) => {
     const subscriptionId = req.user?.subscriptionId || 1;
     const { type } = req.query; // 'CATEGORIA', 'MARCA', 'MONEDA', 'AFECTACION', 'UNIDAD_MEDIDA'
 
-    const whereConditions: any = { subscriptionId, isActive: true };
+    // =========================================================================
+    // 🎯 EL DESTRABE DE PARÁMETROS UNIVERSALES CROSS-TENANT (MYSQL EN AIVEN)
+    // Construimos la condición amparando lo que es GLOBAL o propio del HOLDING
+    // =========================================================================
+    const whereConditions: any = { 
+      isActive: true,
+      [Op.or]: [
+        { subscriptionId: null },            // 🔌 Luz verde a lo transversal (Monedas, Afectaciones, Unidades)
+        { subscriptionId: subscriptionId }   // 🔒 Privado y exclusivo (Tus Categorías y Marcas personalizadas)
+      ]
+    };
+
+    // Si Angular nos envía un tipo específico, lo inyectamos al búnker de condiciones
     if (type) {
       whereConditions.parameterType = (type as string).toUpperCase();
     }
+    // =========================================================================
 
     const parameters = await AuxiliaryParameterModel.findAll({
       where: whereConditions,
@@ -43,6 +58,7 @@ productRouter.get("/parameters", authMiddleware, async (req: any, res: any) => {
 
     return res.status(200).json({ status: "success", data: parameters });
   } catch (error: any) {
+    console.error('🚨 [CRASH CATALOG PARAMETERS]:', error.message);
     return res.status(500).json({ status: "error", message: error.message });
   }
 });

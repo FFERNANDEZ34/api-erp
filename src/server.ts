@@ -21,6 +21,8 @@ import { kardexRouter } from "./presentation/http/routes/kardex.routes";
 import { paymentRouter } from "./presentation/http/routes/payment.routes";
 import { dashboardRouter } from "./presentation/http/routes/dashboard.routes"; 
 import { securityRouter } from "./presentation/http/routes/security.routes"; 
+import { adminRouter } from "./presentation/http/routes/admin.routes"; 
+
 
 
 import path from "path";
@@ -101,6 +103,7 @@ app.use(
 app.use("/api/dashboard", authMiddleware, checkExchangeRateMiddleware, dashboardRouter); 
 app.use("/api/security", authMiddleware, checkExchangeRateMiddleware, securityRouter); 
 
+app.use('/api/admin', adminRouter);
 // Manejador centralizado de errores
 app.use(errorMiddleware);
 

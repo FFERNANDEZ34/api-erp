@@ -5,10 +5,14 @@ import { UserModel } from "../../../infrastructure/database/models/user.model";
 import { BranchWarehouseModel } from "../../../infrastructure/database/models/branch-warehouse.model";
 import { RoleModel } from "../../../infrastructure/database/models/role.model";
 import { UserCompanyRoleModel } from "../../../infrastructure/database/models/user-company-role.model";
-import { EmailService } from "../../../infrastructure/services/email.service"; 
+import { EmailService } from "../../../infrastructure/services/email.service";
+import { SubscriptionApplicationModel } from "../../../infrastructure/database/models/subscription-application.model";
+import { MenuOptionModel } from '../../../infrastructure/database/models/menu-option.model'; // 🚀 IMPORTA PARA LEER OPCIONES TRANSVERSALES
+import { RoleMenuPermissionModel } from '../../../infrastructure/database/models/role-menu-permission.model'; // 🚀 IMPORTA EL CONCESIONARIO DE PERMISOS
+
 
 import bcrypt from "bcrypt";
-import crypto from "crypto"; // 🚀 Librería nativa de Node.js para criptografía
+import crypto from "crypto";
 
 export class SubscribeCompanyUseCase {
   async execute(data: {
@@ -33,8 +37,10 @@ export class SubscribeCompanyUseCase {
       );
     }
 
-     if (!/^(10|15|17|20)\d{9}$/.test(data.companyRuc)) {
-      throw new Error('El RUC de la compañía es inválido. Debe tener exactamente 11 dígitos y comenzar con un prefijo tributario válido (10, 15, 17 o 20).');
+    if (!/^(10|15|17|20)\d{9}$/.test(data.companyRuc)) {
+      throw new Error(
+        "El RUC de la compañía es inválido. Debe tener exactamente 11 dígitos y comenzar con un prefijo tributario válido (10, 15, 17 o 20).",
+      );
     }
 
     const rucExists = await CompanyModel.findOne({
@@ -116,6 +122,49 @@ export class SubscribeCompanyUseCase {
         { transaction: t },
       );
 
+      // =========================================================================
+      // 🎯 CAPA 7: ACTIVACIÓN BAJO DEMANDA - ADQUISICIÓN DEL CORE DE FACTURACIÓN
+      // Vinculamos la suscripción con el ID de la app transversal de facturación (ID: 1)
+      // =========================================================================
+      console.log(`📡 [NÚCLEO MODULAR] Activando App 'Facturación Electrónica' para Tenant #${subscription.id}`);
+      
+      await SubscriptionApplicationModel.create({
+        subscriptionId: subscription.id,
+        applicationId: 1 // 🔌 ID 1: Mapeado de forma transversal a Facturación Electrónica
+      }, { transaction: t });
+      
+      console.log(`✅ [MODULAR SUCCESS] Licencia base concedida de forma atómica.`);
+      // =========================================================================
+
+// =========================================================================
+      // 🛡️ CAPA 8: GRANT MAESTRO - CONCESIÓN AUTOMÁTICA DE PERMISOS AL SUPER-ADMIN
+      // Buscamos todas las opciones de menú que pertenecen a las aplicaciones activadas
+      // de forma transversal y les otorgamos acceso total para este nuevo Tenant
+      // =========================================================================
+      console.log(`🔑 [NÚCLEO SEGURIDAD] Concediendo privilegios de navegación masivos al perfil 'super-admin'...`);
+
+      const availableMenus = await MenuOptionModel.findAll({
+        where: { applicationId: 1 }, // Jalamos las opciones transversales de la App contratada (ID: 1)
+        transaction: t,
+        raw: true
+      });
+
+      if (availableMenus.length > 0) {
+        // Mapeamos el lote completo para realizar una inserción masiva (Bulk Create) ultra-rápida
+        const permissionRows = availableMenus.map(menu => ({
+          subscriptionId: subscription.id, // Aislamiento Multi-Tenant estricto
+          roleId: role.id,                 // ID del perfil super-admin asegurado en la Capa 5
+          menuOptionId: menu.id
+        }));
+
+        // Insertamos de un solo golpe atómico en tu tabla relacional
+        await RoleMenuPermissionModel.bulkCreate(permissionRows, { transaction: t });
+        console.log(`🏆 [GRANT SUCCESS] Otorgados con éxito [${permissionRows.length}] permisos de accesos al menú.`);
+      }
+      // =========================================================================
+
+
+
       // 🛠️ Extraemos la URL base del .env con fallback defensivo local
       const frontendBaseUrl =
         process.env.FRONTEND_URL || "http://localhost:4200";
@@ -138,21 +187,26 @@ export class SubscribeCompanyUseCase {
       // =========================================================================
       try {
         const emailService = new EmailService();
-        
+
         // Disparamos consumiendo el nuevo motor polimórfico universal
         await emailService.sendEmail(
-          emailClean, 
-          '🔐 ACCESO REQUERIDO: Confirme su cuenta', 
-          'verification-email.html', 
+          emailClean,
+          "🔐 ACCESO REQUERIDO: Confirme su cuenta",
+          "verification-email.html",
           {
             contactName: data.contactName,
-            confirmationLink: confirmationLink
-          }
+            confirmationLink: confirmationLink,
+          },
         );
       } catch (emailError: any) {
         // Capturamos el quiebre de red sin relanzarlo con throw. El flujo NO se detiene.
-        console.error('⚠️ [FALLO DE NOTIFICACIÓN DETECTADO Y AISLADO]:', emailError.message);
-        console.warn('💡 La infraestructura inicial se consolidó con éxito en Aiven, ignorando el corte de sockets SMTP.');
+        console.error(
+          "⚠️ [FALLO DE NOTIFICACIÓN DETECTADO Y AISLADO]:",
+          emailError.message,
+        );
+        console.warn(
+          "💡 La infraestructura inicial se consolidó con éxito en Aiven, ignorando el corte de sockets SMTP.",
+        );
       }
       //--------------------------------------------------------------------
 
