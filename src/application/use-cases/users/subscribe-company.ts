@@ -103,24 +103,40 @@ export class SubscribeCompanyUseCase {
         { transaction: t },
       );
 
-      // Capa 5: Asegurar el Rol 'super-admin'
-      const [role] = await RoleModel.findOrCreate({
-        where: { name: "super-admin" },
-        transaction: t,
-      });
+      // =========================================================================
+      // 🛡️ CAPA 5: APROVISIONAMIENTO DE ROLES PROPIOS EXCLUSIVOS POR EMPRESA
+      // Fundamos los perfiles base amarrados de por vida al DDL de tu nuevo Tenant
+      // =========================================================================
+      console.log(`📦 [NÚCLEO PERFILES] Creando roles corporativos para Subscription: [${subscription.id}] | Empresa: [${company.id}]`);
 
-      // Capa 6: Intersección final de permisos
-      await UserCompanyRoleModel.create(
-        {
-          subscriptionId: subscription.id,
-          userId: adminUser.id,
-          companyId: company.id,
-          branchId: branch.id,
-          roleId: role.id,
-          isDefault: true,
-        },
-        { transaction: t },
-      );
+      // 1. Creamos de forma explícita el perfil Super Admin de esta empresa
+      const superAdminRole = await RoleModel.create({
+        subscriptionId: subscription.id,
+        companyId: company.id,
+        name: 'super-admin',
+        description: 'Acceso total y absoluto a las configuraciones maestras, inventarios y contabilidad del holding.',
+        isActive: true
+      }, { transaction: t });
+
+      // 2. Dejamos creado preventivamente el rol de Cajero para sus futuros colaboradores del POS
+      await RoleModel.create({
+        subscriptionId: subscription.id,
+        companyId: company.id,
+        name: 'cajero',
+        description: 'Perfil operativo restringido para la emisión de comprobantes en el Punto de Venta (POS).',
+        isActive: true
+      }, { transaction: t });
+      // =========================================================================
+
+      // Capa 6: Intersección final de permisos (Amarrado al ID del rol exclusivo recién creado)
+      await UserCompanyRoleModel.create({
+        subscriptionId: subscription.id,
+        userId: adminUser.id,
+        companyId: company.id,
+        branchId: branch.id,
+        roleId: superAdminRole.id, // 🎯 ¡ENGRANADO! Recibe el ID del rol de su propia empresa
+        isDefault: true,
+      }, { transaction: t });
 
       // =========================================================================
       // 🎯 CAPA 7: ACTIVACIÓN BAJO DEMANDA - ADQUISICIÓN DEL CORE DE FACTURACIÓN
@@ -153,7 +169,7 @@ export class SubscribeCompanyUseCase {
         // Mapeamos el lote completo para realizar una inserción masiva (Bulk Create) ultra-rápida
         const permissionRows = availableMenus.map(menu => ({
           subscriptionId: subscription.id, // Aislamiento Multi-Tenant estricto
-          roleId: role.id,                 // ID del perfil super-admin asegurado en la Capa 5
+          roleId: superAdminRole.id,                 // ID del perfil super-admin asegurado en la Capa 5
           menuOptionId: menu.id
         }));
 
