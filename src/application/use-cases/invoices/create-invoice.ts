@@ -2,8 +2,9 @@ import { sequelizeInstance } from "../../../infrastructure/database/sequelize.co
 import { InvoiceHeaderModel } from "../../../infrastructure/database/models/invoice-header.model";
 import { InvoiceDetailModel } from "../../../infrastructure/database/models/invoice-detail.model";
 import { DocumentSeriesModel } from "../../../infrastructure/database/models/document-series.model";
-import { ProductModel } from "../../../infrastructure/database/models/product.model"; // 🚀 Sincronizado
-import { ProductKardexModel } from "../../../infrastructure/database/models/product-kardex.model"; // 🚀 Sincronizado
+import { ProductModel } from "../../../infrastructure/database/models/product.model"; 
+import { ProductKardexModel } from "../../../infrastructure/database/models/product-kardex.model"; 
+import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model"; 
 
 export interface InvoiceDetailInput {
   productId: number;
@@ -126,6 +127,12 @@ export class CreateInvoiceUseCase {
           where: { id: item.productId, subscriptionId: data.subscriptionId },
           transaction,
           lock: transaction.LOCK.UPDATE, // Evita colisiones por doble venta simultánea
+          include: [{
+            model: AuxiliaryParameterModel,
+            as: "UnitMeasureParameter", // 🔥 Asegúrate de usar el alias exacto que definiste en tus asociaciones
+            required: false,
+            attributes: ["id", "code", "name"]
+          }],
         });
 
         if (!productRow) {
@@ -134,50 +141,78 @@ export class CreateInvoiceUseCase {
           );
         }
 
+        //************************************************************* */
         // Leemos de forma ultra veloz la columna caché
         const currentStock = Number(productRow.get("stock") || 0);
+        
+       // =========================================================================
+        // 🎯 EL DESTRABE ABSOLUTO MÁSTER: LEEMOS LA UNIDAD DIRECTO DE MYSQL (AIVEN)
+        // Extraemos el código real ('ZZ' o 'NIU') guardado en la base de datos
+        // =========================================================================
+        const realUnitCode = String(productRow.UnitMeasureParameter?.code || 'NIU').toUpperCase().trim();
+        const realUnitName = String(productRow.UnitMeasureParameter?.name || 'UNIDADES').toUpperCase().trim();
+        
+        // El cortafuegos se activa si el código de la SUNAT es ZZ o la glosa contiene SERVICIO
+        const isServiceItem = realUnitCode === 'ZZ' || realUnitName.includes('SERVICIO');
+        // =========================================================================
 
+console.log(realUnitCode);
+console.log(realUnitName);
         // =========================================================================
         // 🛡️ CONDICIONAL ATÓMICO INVENTORY: Solo resta si es Factura o Boleta
         // =========================================================================
         if (shouldAffectInventory) {
-          // B. Condicional Logístico: Evaluamos disponibilidad solo si es un Bien físico (NIU)
-          if (item.unitMeasureCode === "NIU" && currentStock < qty) {
-            throw new Error(
-              `Stock insuficiente para [${productRow.get("name")}]. Saldo en almacén: ${currentStock}, Solicitado: ${qty}`,
+          
+          // 📦 CASO A: SI ES UN BIEN FÍSICO (TANGIBLE), APLICAMOS CONTROL LOGÍSTICO ESTRICTO
+          if (!isServiceItem) {
+            
+            // Evaluamos disponibilidad en tiempo real
+            if (currentStock < qty) {
+              throw new Error(
+                `Stock insuficiente para [${productRow.get("name")}]. Saldo en almacén: ${currentStock}, Solicitado: ${qty}`,
+              );
+            }
+
+            const calculatedFinalStock = currentStock - qty;
+
+            // C. RESTA ATÓMICA: Actualizamos la columna caché de saldos en disco de forma instantánea
+            await productRow.update(
+              { stock: calculatedFinalStock },
+              { transaction },
+            );
+
+            // D. TRAZABILIDAD: Insertamos el registro inmutable en el Kardex para auditorías
+            await ProductKardexModel.create(
+              {
+                subscriptionId: data.subscriptionId,
+                companyId: data.companyId,
+                branchId: data.branchId,
+                productId: productRow.id,
+                movementType: "SALIDA",
+                sourceDocument: fullNumberStr, // Queda amarrado al ticket calculado arriba
+                quantity: qty,
+                previousStock: currentStock,
+                actualStock: calculatedFinalStock,
+              },
+              { transaction },
+            );
+
+            console.log(
+              `📦 KARDEX SINCRO - [${productRow.get("name")}] restado con éxito. Nuevo saldo: ${calculatedFinalStock}`,
+            );
+
+          } else {
+            // ⚡ CASO B: ES UN SERVICIO INTANGIBLE
+            // Omitimos la resta de inventarios y el Kárdex en frío, dándole luz verde inmediata
+            console.log(
+              `✨ [POS LOGÍSTICA] [${productRow.get("name")}] es un SERVICIO (${realUnitCode}). Ignorando control de existencias.`
             );
           }
-
-          const calculatedFinalStock = currentStock - qty;
-
-          // C. RESTA ATÓMICA: Actualizamos la columna caché de saldos en disco de forma instantánea
-          await productRow.update(
-            { stock: calculatedFinalStock },
-            { transaction },
-          );
-
-          // D. TRAZABILIDAD: Insertamos el registro inmutable en el Kardex para auditorías
-          await ProductKardexModel.create(
-            {
-              subscriptionId: data.subscriptionId,
-              companyId: data.companyId,
-              branchId: data.branchId,
-              productId: productRow.id,
-              movementType: "SALIDA",
-              sourceDocument: fullNumberStr, // Queda amarrado al ticket calculado arriba: 'B001-00000002'
-              quantity: qty,
-              previousStock: currentStock,
-              actualStock: calculatedFinalStock,
-            },
-            { transaction },
-          );
           // =========================================================================
-          console.log(
-            `📦 KARDEX SINCRO - [${productRow.name}] restado con éxito. Nuevo saldo: ${calculatedFinalStock}`,
-          );
+          
         } else {
           console.log(
-            `📝 PRE-VENTA AUDIT - [${productRow.name}] cotizado sin alterar existencias físicas.`,
+            `📝 PRE-VENTA AUDIT - [${productRow.get("name")}] cotizado sin alterar existencias físicas.`,
           );
         }
 
@@ -185,7 +220,7 @@ export class CreateInvoiceUseCase {
           productId: item.productId,
           productCode: item.productCode,
           productName: item.productName,
-          unitMeasureCode: item.unitMeasureCode,
+          unitMeasureCode: realUnitCode,
           quantity: qty,
           unitPrice: priceWithIgv,
           unitValue: valueWithoutIgv,
@@ -195,6 +230,7 @@ export class CreateInvoiceUseCase {
           subtotalIgv: subtotalIgv,
           subtotalPrice: subtotalPrice,
         });
+        //************************************************************* */
       }
       // =========================================================================
       // 5. Captura de marca de tiempo en la zona horaria del servidor

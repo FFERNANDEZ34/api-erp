@@ -1,5 +1,6 @@
 import { Model, DataTypes } from 'sequelize';
 import { sequelizeInstance } from '../sequelize.config';
+import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model"; 
 
 export class ProductModel extends Model {
   declare public id: number;
@@ -25,6 +26,7 @@ export class ProductModel extends Model {
   declare public allowSearch: boolean;
   declare public readonly createdAt: Date;
   declare public readonly updatedAt: Date;
+  declare public UnitMeasureParameter?: AuxiliaryParameterModel | null;
 }
 
 ProductModel.init(
@@ -142,3 +144,10 @@ ProductModel.init(
     timestamps: true,
   }
 );
+
+ProductModel.belongsTo(AuxiliaryParameterModel, {
+  foreignKey: 'unitMeasureParamId', // La columna física FK en tu tabla products de MySQL
+  targetKey: 'id',                  // La clave primaria en la tabla sys_auxiliary_parameters
+  as: 'UnitMeasureParameter',       // El alias exacto (CamelCase) que consume tu include en los Use Cases
+  constraints: false                // Flexibilidad Multi-Tenant desactivando validaciones estrictas de arranque
+});
