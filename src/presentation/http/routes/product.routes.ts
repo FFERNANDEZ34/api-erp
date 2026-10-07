@@ -6,7 +6,8 @@ import { UpdateProductUseCase } from "../../../application/use-cases/products/up
 import { DeleteProductUseCase } from "../../../application/use-cases/products/delete-product";
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model"; // Ajusta la ruta
-
+import { ProductBrandModel } from "../../../infrastructure/database/models/product-brand.model";
+import { ProductCategoryModel } from "../../../infrastructure/database/models/product-category.model";
 import { Op } from 'sequelize';
 
 const productRouter = Router();
@@ -62,6 +63,49 @@ productRouter.get("/parameters", authMiddleware, async (req: any, res: any) => {
     return res.status(500).json({ status: "error", message: error.message });
   }
 });
+
+productRouter.get("/categories", authMiddleware, async (req: any, res: any) => {
+  try {
+    const subscriptionId = req.user?.subscriptionId;
+    const companyId = req.user?.activeContext?.companyId || 1; // ID de empresa del token de login
+
+    if (!subscriptionId) return res.status(401).json({ status: "fail", message: "No autorizado." });
+
+    const categories = await ProductCategoryModel.findAll({
+      where: { subscriptionId, companyId, isActive: true },
+      order: [['name', 'ASC']],
+      raw: true
+    });
+
+    return res.status(200).json({ status: "success", data: categories });
+  } catch (error: any) {
+    return res.status(500).json({ status: "error", message: error.message });
+  }
+});
+
+/**
+ * 📡 GOLPE B: Listar Marcas de la Empresa Activa
+ * URL en Angular: /api/products/brands
+ */
+productRouter.get("/brands", authMiddleware, async (req: any, res: any) => {
+  try {
+    const subscriptionId = req.user?.subscriptionId;
+    const companyId = req.user?.activeContext?.companyId || 1;
+
+    if (!subscriptionId) return res.status(401).json({ status: "fail", message: "No autorizado." });
+
+    const brands = await ProductBrandModel.findAll({
+      where: { subscriptionId, companyId, isActive: true },
+      order: [['name', 'ASC']],
+      raw: true
+    });
+
+    return res.status(200).json({ status: "success", data: brands });
+  } catch (error: any) {
+    return res.status(500).json({ status: "error", message: error.message });
+  }
+});
+
 // Mapeado físico de Endpoints protegidos por sesión transaccional
 productRouter.post("/", authMiddleware, (req: any, res: any) => productController.create(req, res));
 productRouter.get("/", authMiddleware, (req: any, res: any) => productController.getPaginated(req, res));

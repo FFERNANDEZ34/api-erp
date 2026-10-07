@@ -7,9 +7,10 @@ import { RoleModel } from "../../../infrastructure/database/models/role.model";
 import { UserCompanyRoleModel } from "../../../infrastructure/database/models/user-company-role.model";
 import { EmailService } from "../../../infrastructure/services/email.service";
 import { SubscriptionApplicationModel } from "../../../infrastructure/database/models/subscription-application.model";
-import { MenuOptionModel } from '../../../infrastructure/database/models/menu-option.model'; // 🚀 IMPORTA PARA LEER OPCIONES TRANSVERSALES
-import { RoleMenuPermissionModel } from '../../../infrastructure/database/models/role-menu-permission.model'; // 🚀 IMPORTA EL CONCESIONARIO DE PERMISOS
-
+import { MenuOptionModel } from "../../../infrastructure/database/models/menu-option.model";
+import { ProductBrandModel } from "../../../infrastructure/database/models/product-brand.model";
+import { ProductCategoryModel } from "../../../infrastructure/database/models/product-category.model";
+import { RoleMenuPermissionModel } from "../../../infrastructure/database/models/role-menu-permission.model"; // 🚀 IMPORTA EL CONCESIONARIO DE PERMISOS
 
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -107,79 +108,138 @@ export class SubscribeCompanyUseCase {
       // 🛡️ CAPA 5: APROVISIONAMIENTO DE ROLES PROPIOS EXCLUSIVOS POR EMPRESA
       // Fundamos los perfiles base amarrados de por vida al DDL de tu nuevo Tenant
       // =========================================================================
-      console.log(`📦 [NÚCLEO PERFILES] Creando roles corporativos para Subscription: [${subscription.id}] | Empresa: [${company.id}]`);
+      console.log(
+        `📦 [NÚCLEO PERFILES] Creando roles corporativos para Subscription: [${subscription.id}] | Empresa: [${company.id}]`,
+      );
 
       // 1. Creamos de forma explícita el perfil Super Admin de esta empresa
-      const superAdminRole = await RoleModel.create({
-        subscriptionId: subscription.id,
-        companyId: company.id,
-        name: 'super-admin',
-        description: 'Acceso total y absoluto a las configuraciones maestras, inventarios y contabilidad del holding.',
-        isActive: true
-      }, { transaction: t });
+      const superAdminRole = await RoleModel.create(
+        {
+          subscriptionId: subscription.id,
+          companyId: company.id,
+          name: "super-admin",
+          description:
+            "Acceso total y absoluto a las configuraciones maestras, inventarios y contabilidad del holding.",
+          isActive: true,
+        },
+        { transaction: t },
+      );
 
       // 2. Dejamos creado preventivamente el rol de Cajero para sus futuros colaboradores del POS
-      await RoleModel.create({
-        subscriptionId: subscription.id,
-        companyId: company.id,
-        name: 'cajero',
-        description: 'Perfil operativo restringido para la emisión de comprobantes en el Punto de Venta (POS).',
-        isActive: true
-      }, { transaction: t });
+      await RoleModel.create(
+        {
+          subscriptionId: subscription.id,
+          companyId: company.id,
+          name: "cajero",
+          description:
+            "Perfil operativo restringido para la emisión de comprobantes en el Punto de Venta (POS).",
+          isActive: true,
+        },
+        { transaction: t },
+      );
       // =========================================================================
 
       // Capa 6: Intersección final de permisos (Amarrado al ID del rol exclusivo recién creado)
-      await UserCompanyRoleModel.create({
-        subscriptionId: subscription.id,
-        userId: adminUser.id,
-        companyId: company.id,
-        branchId: branch.id,
-        roleId: superAdminRole.id, // 🎯 ¡ENGRANADO! Recibe el ID del rol de su propia empresa
-        isDefault: true,
-      }, { transaction: t });
+      await UserCompanyRoleModel.create(
+        {
+          subscriptionId: subscription.id,
+          userId: adminUser.id,
+          companyId: company.id,
+          branchId: branch.id,
+          roleId: superAdminRole.id, // 🎯 ¡ENGRANADO! Recibe el ID del rol de su propia empresa
+          isDefault: true,
+        },
+        { transaction: t },
+      );
 
       // =========================================================================
       // 🎯 CAPA 7: ACTIVACIÓN BAJO DEMANDA - ADQUISICIÓN DEL CORE DE FACTURACIÓN
       // Vinculamos la suscripción con el ID de la app transversal de facturación (ID: 1)
       // =========================================================================
-      console.log(`📡 [NÚCLEO MODULAR] Activando App 'Facturación Electrónica' para Tenant #${subscription.id}`);
-      
-      await SubscriptionApplicationModel.create({
-        subscriptionId: subscription.id,
-        applicationId: 1 // 🔌 ID 1: Mapeado de forma transversal a Facturación Electrónica
-      }, { transaction: t });
-      
-      console.log(`✅ [MODULAR SUCCESS] Licencia base concedida de forma atómica.`);
+      console.log(
+        `📡 [NÚCLEO MODULAR] Activando App 'Facturación Electrónica' para Tenant #${subscription.id}`,
+      );
+
+      await SubscriptionApplicationModel.create(
+        {
+          subscriptionId: subscription.id,
+          applicationId: 1, // 🔌 ID 1: Mapeado de forma transversal a Facturación Electrónica
+        },
+        { transaction: t },
+      );
+
+      console.log(
+        `✅ [MODULAR SUCCESS] Licencia base concedida de forma atómica.`,
+      );
       // =========================================================================
 
-// =========================================================================
+      // 🎯 DENTRO DE LA TRANSACCIÓN DE TU SUBSCRIBE_COMPANY (CAPA 9 CALIBRADA):
+      console.log(
+        `📦 [NÚCLEO INVENTARIOS MULTI-COMPANY] Aprovisionando semillas aisladas por Empresa...`,
+      );
+
+      // 1. Sembrado de Categoría por Defecto amarrado a la empresa naciente
+      const defaultCategory = await ProductCategoryModel.create(
+        {
+          subscriptionId: subscription.id,
+          companyId: company.id, // 🔒 Aislamiento absoluto por local/empresa comercial
+          name: "GENERAL",
+          description:
+            "Categoría raíz predeterminada exclusiva para el despliegue de este rubro comercial.",
+          isActive: true,
+        },
+        { transaction: t },
+      );
+
+      // 2. Sembrado de Marca por Defecto amarrado a la empresa naciente
+      const defaultBrand = await ProductBrandModel.create(
+        {
+          subscriptionId: subscription.id,
+          companyId: company.id, // 🔒 Aislamiento absoluto por local/empresa comercial
+          name: "GENÉRICO",
+          description:
+            "Marca global estándar asignada a productos sin fabricante específico en esta empresa.",
+          isActive: true,
+        },
+        { transaction: t },
+      );
+
+      console.log(
+        `✅ [INVENTARIOS SUCCESS] Semillas clonadas con éxito para Compañía ID: [${company.id}]`,
+      );
+
+      // =========================================================================
       // 🛡️ CAPA 8: GRANT MAESTRO - CONCESIÓN AUTOMÁTICA DE PERMISOS AL SUPER-ADMIN
       // Buscamos todas las opciones de menú que pertenecen a las aplicaciones activadas
       // de forma transversal y les otorgamos acceso total para este nuevo Tenant
       // =========================================================================
-      console.log(`🔑 [NÚCLEO SEGURIDAD] Concediendo privilegios de navegación masivos al perfil 'super-admin'...`);
+      console.log(
+        `🔑 [NÚCLEO SEGURIDAD] Concediendo privilegios de navegación masivos al perfil 'super-admin'...`,
+      );
 
       const availableMenus = await MenuOptionModel.findAll({
         where: { applicationId: 1 }, // Jalamos las opciones transversales de la App contratada (ID: 1)
         transaction: t,
-        raw: true
+        raw: true,
       });
 
       if (availableMenus.length > 0) {
         // Mapeamos el lote completo para realizar una inserción masiva (Bulk Create) ultra-rápida
-        const permissionRows = availableMenus.map(menu => ({
+        const permissionRows = availableMenus.map((menu) => ({
           subscriptionId: subscription.id, // Aislamiento Multi-Tenant estricto
-          roleId: superAdminRole.id,                 // ID del perfil super-admin asegurado en la Capa 5
-          menuOptionId: menu.id
+          roleId: superAdminRole.id, // ID del perfil super-admin asegurado en la Capa 5
+          menuOptionId: menu.id,
         }));
 
         // Insertamos de un solo golpe atómico en tu tabla relacional
-        await RoleMenuPermissionModel.bulkCreate(permissionRows, { transaction: t });
-        console.log(`🏆 [GRANT SUCCESS] Otorgados con éxito [${permissionRows.length}] permisos de accesos al menú.`);
+        await RoleMenuPermissionModel.bulkCreate(permissionRows, {
+          transaction: t,
+        });
+        console.log(
+          `🏆 [GRANT SUCCESS] Otorgados con éxito [${permissionRows.length}] permisos de accesos al menú.`,
+        );
       }
       // =========================================================================
-
-
 
       // 🛠️ Extraemos la URL base del .env con fallback defensivo local
       const frontendBaseUrl =

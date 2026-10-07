@@ -42,7 +42,19 @@ export class GetKardexSummaryUseCase {
     return products.map((p: any) => {
       const currentStock = Number(p.stock || 0);
       const minStock = Number(p.minimumStock || 0);
-      const isUnderMinimum = currentStock <= minStock;
+      
+      const unitCode = String(p.UnitMeasureParameter?.code || 'NIU').toUpperCase().trim();
+      const unitName = String(p.UnitMeasureParameter?.name || 'UNIDADES').toUpperCase().trim();
+
+      // =========================================================================
+      // 🛡️ CORTAFUEGOS TRIBUTARIO INTERNACIONAL: DETECCIÓN NATIVA DE SERVICIOS
+      // El código 'ZZ' representa formalmente Servicios en el estándar SUNAT / UBL 2.1
+      // =========================================================================
+      const isService = unitCode === 'ZZ' || unitName.includes('SERVICIO');
+
+      // Evaluamos el semáforo: Si es un servicio, JAMÁS prenderá en rojo (Inmunizado)
+      const isUnderMinimum = isService ? false : (currentStock <= minStock);
+      // =========================================================================
 
       return {
         productId: p.id,
@@ -52,7 +64,7 @@ export class GetKardexSummaryUseCase {
         unitMeasureCode: p.UnitMeasureParameter?.code || 'NIU',
         currentStock: currentStock,
         minimumStock: minStock,
-        underMinimum: isUnderMinimum // 🔴 El switch definitivo para encender el rojo en Angular
+        underMinimum: isUnderMinimum // 🔴 El switch definitivo que Angular leerá para pintar o no el rojo
       };
     });
   }
