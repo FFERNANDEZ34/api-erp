@@ -1,9 +1,8 @@
 import { EntityModel } from "../../../infrastructure/database/models/entity.model";
-import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model"; // 🚀 ¡AÑADIDO!: Importamos el modelo paramétrico
+import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model";
 import { Op } from "sequelize";
 import { OrderItem } from "sequelize";
 
-// 🌟 AMPLIAMOS LA INTERFAZ: Registramos de forma estricta los nuevos campos de filtrado
 export interface EntityFilters {
   name?: string;
   documentNumber?: string;
@@ -25,8 +24,7 @@ export class GetEntitiesPaginatedUseCase {
     sortInput: { field?: string; order?: string };
   }) {
     const sanitizedPage = params.page < 1 ? 1 : params.page;
-    const sanitizedLimit =
-      params.limit < 1 || params.limit > 100 ? 10 : params.limit;
+    const sanitizedLimit = params.limit < 1 || params.limit > 100 ? 10 : params.limit;
     const offset = (sanitizedPage - 1) * sanitizedLimit;
 
     // 1. Construir Cláusula WHERE (Filtros + Aislamiento por Suscripción)
@@ -38,20 +36,11 @@ export class GetEntitiesPaginatedUseCase {
       whereClause.name = { [Op.like]: `%${params.filters.name.trim()}%` };
     }
 
-    if (
-      params.filters.documentNumber &&
-      params.filters.documentNumber.trim().length > 0
-    ) {
-      whereClause.documentNumber = {
-        [Op.like]: `%${params.filters.documentNumber.trim()}%`,
-      };
+    if (params.filters.documentNumber && params.filters.documentNumber.trim().length > 0) {
+      whereClause.documentNumber = { [Op.like]: `%${params.filters.documentNumber.trim()}%` };
     }
 
-    if (
-      params.filters.documentType &&
-      params.filters.documentType.trim().length > 0
-    ) {
-      // 🌟 CORRECCIÓN: Filtramos el código directo sin toLowerCase() ya que guarda '1', '6', etc.
+    if (params.filters.documentType && params.filters.documentType.trim().length > 0) {
       whereClause.documentType = params.filters.documentType.trim();
     }
 
@@ -63,50 +52,49 @@ export class GetEntitiesPaginatedUseCase {
     const allowedFields = ["id", "name", "entityType", "createdAt"];
     const allowedOrders = ["ASC", "DESC"];
 
-    const field = allowedFields.includes(params.sortInput.field || "")
-      ? params.sortInput.field
-      : "id";
-
-    // Unificamos el ordenamiento convirtiendo la cadena a mayúsculas
+    const field = allowedFields.includes(params.sortInput.field || "") ? params.sortInput.field : "id";
     const orderInputUpper = params.sortInput.order?.toUpperCase() || "";
-    const order = allowedOrders.includes(orderInputUpper)
-      ? orderInputUpper
-      : "ASC";
+    const order = allowedOrders.includes(orderInputUpper) ? orderInputUpper : "ASC";
 
     // =========================================================================
-    // 🚀 3. ENGRANAJE RELACIONAL EN CALIENTE (ASOCIACIÓN DE SEQUELIZE)
+    // 🚀 3. ENGRANAJE RELACIONAL CROSS-TENANT EN CALIENTE (ASOCIACIÓN DEFINITIVA)
     // =========================================================================
     if (!EntityModel.associations.DocumentParameter) {
       EntityModel.belongsTo(AuxiliaryParameterModel, {
-        foreignKey: "documentType", // La columna en la tabla entities
-        targetKey: "code", // La columna en la tabla sys_auxiliary_parameters
-        as: "DocumentParameter", // Alias de navegación para la consulta
+        foreignKey: "documentType", // La columna en la tabla entities (Ej: '1' o '6')
+        targetKey: "code",          // Se amarra a la columna 'code' de la tabla de parámetros
+        as: "DocumentParameter",
         constraints: false,
         scope: {
           parameterType: "TIPO_DOCUMENTO_IDENTIDAD",
-          subscriptionId: params.subscriptionId, // Garantiza aislamiento multi-tenant del parámetro
+          // 🔌 EL DESTRABE CONTABLE: Permitimos jalar los parámetros globales de la SUNAT (NULL)
+          // o los parametrizados específicamente en el holding
+          [Op.or]: [
+            { subscriptionId: null },
+            { subscriptionId: params.subscriptionId }
+          ]
         },
       });
     }
+    // =========================================================================
+
     // 4. Ejecutar consulta en la Base de Datos incorporando el LEFT JOIN
     const { rows, count } = await EntityModel.findAndCountAll({
       where: whereClause,
       limit: sanitizedLimit,
       offset: offset,
       order: [[field, order]] as OrderItem[],
-      // 🚀 INYECCIÓN LOGÍSTICA: Sequelize resolverá el JOIN de forma nativa en MySQL
       include: [
         {
           model: AuxiliaryParameterModel,
           as: "DocumentParameter",
           required: false, // Actúa exactamente como un LEFT JOIN
-          attributes: ["name"], // Traemos únicamente el campo 'name' descriptivo (DNI, RUC)
+          attributes: ["name", "code"], // Traemos el name (RUC, DNI) y el code para validaciones de front
         },
       ],
     });
 
     return {
-      // Al mapear las filas con toJSON() se incorporará el subobjeto DocumentParameter de forma estructurada
       data: rows.map((r) => r.toJSON()),
       total: count,
       page: sanitizedPage,
