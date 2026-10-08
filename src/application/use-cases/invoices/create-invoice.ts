@@ -2,9 +2,9 @@ import { sequelizeInstance } from "../../../infrastructure/database/sequelize.co
 import { InvoiceHeaderModel } from "../../../infrastructure/database/models/invoice-header.model";
 import { InvoiceDetailModel } from "../../../infrastructure/database/models/invoice-detail.model";
 import { DocumentSeriesModel } from "../../../infrastructure/database/models/document-series.model";
-import { ProductModel } from "../../../infrastructure/database/models/product.model"; 
-import { ProductKardexModel } from "../../../infrastructure/database/models/product-kardex.model"; 
-import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model"; 
+import { ProductModel } from "../../../infrastructure/database/models/product.model";
+import { ProductKardexModel } from "../../../infrastructure/database/models/product-kardex.model";
+import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model";
 
 export interface InvoiceDetailInput {
   productId: number;
@@ -127,12 +127,14 @@ export class CreateInvoiceUseCase {
           where: { id: item.productId, subscriptionId: data.subscriptionId },
           transaction,
           lock: transaction.LOCK.UPDATE, // Evita colisiones por doble venta simultánea
-          include: [{
-            model: AuxiliaryParameterModel,
-            as: "UnitMeasureParameter", // 🔥 Asegúrate de usar el alias exacto que definiste en tus asociaciones
-            required: false,
-            attributes: ["id", "code", "name"]
-          }],
+          include: [
+            {
+              model: AuxiliaryParameterModel,
+              as: "UnitMeasureParameter", // 🔥 Asegúrate de usar el alias exacto que definiste en tus asociaciones
+              required: false,
+              attributes: ["id", "code", "name"],
+            },
+          ],
         });
 
         if (!productRow) {
@@ -144,28 +146,35 @@ export class CreateInvoiceUseCase {
         //************************************************************* */
         // Leemos de forma ultra veloz la columna caché
         const currentStock = Number(productRow.get("stock") || 0);
-        
-       // =========================================================================
+
+        // =========================================================================
         // 🎯 EL DESTRABE ABSOLUTO MÁSTER: LEEMOS LA UNIDAD DIRECTO DE MYSQL (AIVEN)
         // Extraemos el código real ('ZZ' o 'NIU') guardado en la base de datos
         // =========================================================================
-        const realUnitCode = String(productRow.UnitMeasureParameter?.code || 'NIU').toUpperCase().trim();
-        const realUnitName = String(productRow.UnitMeasureParameter?.name || 'UNIDADES').toUpperCase().trim();
-        
+        const realUnitCode = String(
+          productRow.UnitMeasureParameter?.code || "NIU",
+        )
+          .toUpperCase()
+          .trim();
+        const realUnitName = String(
+          productRow.UnitMeasureParameter?.name || "UNIDADES",
+        )
+          .toUpperCase()
+          .trim();
+
         // El cortafuegos se activa si el código de la SUNAT es ZZ o la glosa contiene SERVICIO
-        const isServiceItem = realUnitCode === 'ZZ' || realUnitName.includes('SERVICIO');
+        const isServiceItem =
+          realUnitCode === "ZZ" || realUnitName.includes("SERVICIO");
         // =========================================================================
 
-console.log(realUnitCode);
-console.log(realUnitName);
+        console.log(realUnitCode);
+        console.log(realUnitName);
         // =========================================================================
         // 🛡️ CONDICIONAL ATÓMICO INVENTORY: Solo resta si es Factura o Boleta
         // =========================================================================
         if (shouldAffectInventory) {
-          
           // 📦 CASO A: SI ES UN BIEN FÍSICO (TANGIBLE), APLICAMOS CONTROL LOGÍSTICO ESTRICTO
           if (!isServiceItem) {
-            
             // Evaluamos disponibilidad en tiempo real
             if (currentStock < qty) {
               throw new Error(
@@ -200,16 +209,14 @@ console.log(realUnitName);
             console.log(
               `📦 KARDEX SINCRO - [${productRow.get("name")}] restado con éxito. Nuevo saldo: ${calculatedFinalStock}`,
             );
-
           } else {
             // ⚡ CASO B: ES UN SERVICIO INTANGIBLE
             // Omitimos la resta de inventarios y el Kárdex en frío, dándole luz verde inmediata
             console.log(
-              `✨ [POS LOGÍSTICA] [${productRow.get("name")}] es un SERVICIO (${realUnitCode}). Ignorando control de existencias.`
+              `✨ [POS LOGÍSTICA] [${productRow.get("name")}] es un SERVICIO (${realUnitCode}). Ignorando control de existencias.`,
             );
           }
           // =========================================================================
-          
         } else {
           console.log(
             `📝 PRE-VENTA AUDIT - [${productRow.get("name")}] cotizado sin alterar existencias físicas.`,
