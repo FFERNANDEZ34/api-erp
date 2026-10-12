@@ -1,6 +1,6 @@
-import { DataTypes, Model } from 'sequelize';
-import { sequelizeInstance } from '../sequelize.config';
-import { CompanyModel } from './company.model';
+import { DataTypes, Model } from "sequelize";
+import { sequelizeInstance } from "../sequelize.config";
+import { CompanyModel } from "./company.model";
 
 export class BranchWarehouseModel extends Model {
   declare public id: number;
@@ -21,18 +21,32 @@ BranchWarehouseModel.init(
     companyId: { type: DataTypes.INTEGER, allowNull: false },
     name: { type: DataTypes.STRING(255), allowNull: false },
     address: { type: DataTypes.STRING(255), allowNull: true },
-    isPointOfSale: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
-    isWarehouse: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    isPointOfSale: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    isWarehouse: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
     defaultWarehouseId: { type: DataTypes.INTEGER, allowNull: true },
-    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }
+    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   },
   {
     sequelize: sequelizeInstance,
-    tableName: 'branches_warehouses',
-    timestamps: true
-  }
+    tableName: "branches_warehouses",
+    timestamps: true,
+  },
 );
 
 // Relaciones Cruzadas (Includes)
-BranchWarehouseModel.belongsTo(CompanyModel, { as: 'Company', foreignKey: 'companyId' });
-BranchWarehouseModel.belongsTo(BranchWarehouseModel, { as: 'DefaultWarehouse', foreignKey: 'defaultWarehouseId' });
+BranchWarehouseModel.belongsTo(CompanyModel, {
+  as: "Company",
+  foreignKey: "companyId",
+});
+BranchWarehouseModel.belongsTo(BranchWarehouseModel, {
+  as: "DefaultWarehouse",
+  foreignKey: "defaultWarehouseId",
+});

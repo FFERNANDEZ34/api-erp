@@ -2,16 +2,16 @@ import { Model, DataTypes } from 'sequelize';
 import { sequelizeInstance } from '../sequelize.config';
 
 export class ProductKardexModel extends Model {
-  public id!: number;
-  public subscriptionId!: number;
-  public companyId!: number;
-  public branchId!: number;
-  public productId!: number;
-  public movementType!: 'INGRESO' | 'SALIDA';
-  public sourceDocument!: string;
-  public quantity!: number;
-  public previousStock!: number;
-  public actualStock!: number;
+  declare public id: number;
+  declare public subscriptionId: number;
+  declare public companyId: number;
+  declare public branchId: number;
+  declare public productId: number;
+  declare public movementType: 'INGRESO' | 'SALIDA';
+  declare public sourceDocument: string;
+  declare public quantity: number;
+  declare public previousStock: number;
+  declare public actualStock: number;
   public readonly createdAt!: Date;
 }
 

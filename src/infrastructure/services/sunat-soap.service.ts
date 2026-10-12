@@ -20,7 +20,7 @@ export interface SunatSoapResponse {
 
 export class SunatSoapService {
   // 🌐 ENDPOINT OFICIAL DE PRUEBAS / BETA DE LA SUNAT (HOMOLOGADO)
-  private readonly sunatBetaUrl = 'https://sunat.gob.pe';
+  private readonly sunatBetaUrl = 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService';
 
   /**
    * 🚀 EMPAQUETA, DISPARA AL WEB SERVICE SOAP BETA Y PROCESA EL CDR DE RESPUESTA
@@ -41,31 +41,53 @@ export class SunatSoapService {
       const fullSolUser = `${params.rucEmisor}${params.sunatUserSol.toUpperCase()}`;
       
       const soapEnvelope = `
-<soapenv:Envelope xmlns:soapenv="http://xmlsoap.org" xmlns:ser="http://sunat.gob.pe" xmlns:wsse="http://oasis-open.org">
-   <soapenv:Header>
-      <wsse:Security>
-         <wsse:UsernameToken>
-            <wsse:Username>${fullSolUser}</wsse:Username>
-            <wsse:Password>${params.sunatPasswordSol}</wsse:Password>
-         </wsse:UsernameToken>
-      </wsse:Security>
-   </soapenv:Header>
-   <soapenv:Body>
-      <ser:sendBill>
-         <fileName>${zipFileName}</fileName>
-         <contentFile>${base64Zip}</contentFile>
-      </ser:sendBill>
-   </soapenv:Body>
-</soapenv:Envelope>`.trim();
+<soapenv:Envelope
+ xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+ xmlns:ser="http://service.sunat.gob.pe"
+ xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+
+    <soapenv:Header>
+        <wsse:Security>
+            <wsse:UsernameToken>
+                <wsse:Username>${fullSolUser}</wsse:Username>
+                <wsse:Password>${params.sunatPasswordSol}</wsse:Password>
+            </wsse:UsernameToken>
+        </wsse:Security>
+    </soapenv:Header>
+
+    <soapenv:Body>
+        <ser:sendBill>
+            <fileName>${zipFileName}</fileName>
+            <contentFile>${base64Zip}</contentFile>
+        </ser:sendBill>
+    </soapenv:Body>
+
+</soapenv:Envelope>
+`.trim();
 
       // 3. DISPARO HTTPS DIRECTO SIN DEPENDENCIAS EXTERNAS
       console.log(`📡 [SUNAT RED] Despachando payload binario a los servidores BETA... File: ${zipFileName}`);
       const rawSoapResponse = await this.executeHttpsPost(this.sunatBetaUrl, soapEnvelope);
 
+       console.log("=== RESPUESTA CRUDA LITERAL DE LOS SERVIDORES DE SUNAT ===");
+      console.log(rawSoapResponse);
+      console.log("=========================================================");
+
       // 4. PARSEO QUIRÚRGICO DE LA RESPONSIVA SOAP
-      if (rawSoapResponse.includes('<soapenv:Fault>')) {
-        const faultString = rawSoapResponse.match(/<faultstring>([\s\(\S\)]*?)<\/faultstring>/)?.[1] || 'Error indeterminado en SUNAT WS.';
-        throw new Error(`[Gatillo SUNAT Rechazado]: ${faultString}`);
+      if (rawSoapResponse.includes('Fault>') || rawSoapResponse.includes(':Fault')) {
+        const faultCodeMatch = rawSoapResponse.match(/<faultcode>([\s\(\S\)]*?)<\/faultcode>/);
+        const faultStringMatch = rawSoapResponse.match(/<faultstring>([\s\(\S\)]*?)<\/faultstring>/);
+        
+        const cleanErrorCode = faultCodeMatch?.[1]?.split('.').pop() || '9999';
+        const cleanErrorDesc = faultStringMatch?.[1] || 'Error interno reportado por Web Service SUNAT.';
+
+        console.log(`❌ [SUNAT RECHAZO] Código: [${cleanErrorCode}] | Motivo: ${cleanErrorDesc}`);
+
+        return {
+          success: false,
+          sunatResponseCode: cleanErrorCode,
+          sunatDescription: cleanErrorDesc
+        };
       }
 
       const base64CdrResponse = rawSoapResponse.match(/<applicationResponse>([\s\(\S\)]*?)<\/applicationResponse>/)?.[1];

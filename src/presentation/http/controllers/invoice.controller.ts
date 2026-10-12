@@ -1,15 +1,23 @@
-import { Response } from 'express';
+import { Request,Response } from 'express';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { CreateInvoiceUseCase } from '../../../application/use-cases/invoices/create-invoice';
 import { GetInvoicesPaginatedUseCase } from '../../../application/use-cases/invoices/get-invoices-paginated';
 import { CancelInvoiceUseCase } from '../../../application/use-cases/invoices/cancel-invoice';
+import { RetrySunatUseCase } from "../../../application/use-cases/invoices/retry-sunat.use-case";
+import { DownloadXmlUseCase } from "../../../application/use-cases/invoices/download-xml.use-case";
+import { GetInvoiceByIdUseCase } from "../../../application/use-cases/invoices/get-invoice-by-id";
+
+
 import { z } from 'zod';
 
 export class InvoiceController {
   constructor(
     private readonly createInvoiceUseCase: CreateInvoiceUseCase,
     private readonly getInvoicesPaginatedUseCase: GetInvoicesPaginatedUseCase,
-    private readonly cancelInvoiceUseCase: CancelInvoiceUseCase
+    private readonly cancelInvoiceUseCase: CancelInvoiceUseCase,
+    private readonly retrySunatUseCase: RetrySunatUseCase,
+    private readonly downloadXmlUseCase: DownloadXmlUseCase,
+    private readonly getInvoiceByIdUseCase: GetInvoiceByIdUseCase
   ) {}
 
   // 📥 OPERACIÓN A: Emitir y Consolidar Comprobante Atómico (POST)
@@ -142,4 +150,58 @@ export class InvoiceController {
       data: result
     });
   }
+public async getById(req: Request, res: Response): Promise<Response> {
+    try {
+      const { id } = req.params;
+      
+      const invoiceData = await this.getInvoiceByIdUseCase.execute({ 
+        invoiceId: Number(id) 
+      });
+      
+      return res.status(200).json({
+        status: "success",
+        data: invoiceData
+      });
+    } catch (error: any) {
+      console.error("🚨 [CONTROLADOR GET INVOICE BY ID]:", error);
+      return res.status(404).json({ status: "error", message: error.message });
+    }
+  }
+
+
+    public async retrySunat(req: Request, res: Response): Promise<Response> {
+    try {
+      const { id } = req.params;
+      
+      const result = await this.retrySunatUseCase.execute({ 
+        invoiceId: Number(id) 
+      });
+      
+      return res.status(200).json(result);
+    } catch (error: any) {
+      console.error("🚨 [CONTROLADOR RETRY SUNAT]:", error);
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+   public async downloadXml(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      
+      const result = await this.downloadXmlUseCase.execute({ 
+        invoiceId: Number(id) 
+      });
+
+      // Forzamos las cabeceras HTTP de descarga de archivos de texto XML puro
+      res.setHeader("Content-Type", "text/xml");
+      res.setHeader("Content-Disposition", `attachment; filename="${result.absoluteFilePath}"`);
+      
+      return res.download(result.absoluteFilePath);
+    } catch (error: any) {
+      console.error("🚨 [CONTROLADOR DOWNLOAD XML]:", error);
+      res.status(400).json({ message: error.message });
+    }
+  }
+ 
+ 
+
 }

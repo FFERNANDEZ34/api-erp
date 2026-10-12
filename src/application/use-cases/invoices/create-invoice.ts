@@ -1,3 +1,6 @@
+// =========================================================================
+// 🚀 USE CASE MAESTRO DE EMISIÓN INTEGRADO A SUNAT UBL 2.1 (BLOQUE 1 DE 3)
+// =========================================================================
 import { sequelizeInstance } from "../../../infrastructure/database/sequelize.config";
 import { InvoiceHeaderModel } from "../../../infrastructure/database/models/invoice-header.model";
 import { InvoiceDetailModel } from "../../../infrastructure/database/models/invoice-detail.model";
@@ -5,6 +8,9 @@ import { DocumentSeriesModel } from "../../../infrastructure/database/models/doc
 import { ProductModel } from "../../../infrastructure/database/models/product.model";
 import { ProductKardexModel } from "../../../infrastructure/database/models/product-kardex.model";
 import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model";
+import { SunatOrchestratorService } from "../../../infrastructure/services/sunat-orchestrator.service";
+import { SunatSignerService } from "../../../infrastructure/services/sunat-signer.service";
+import { SunatSoapService } from "../../../infrastructure/services/sunat-soap.service";
 
 export interface InvoiceDetailInput {
   productId: number;
@@ -35,8 +41,15 @@ export interface CreateInvoiceInput {
 }
 
 export class CreateInvoiceUseCase {
+  // private signerService = new SunatSignerService();
+  // private soapService = new SunatSoapService();
+  private sunatOrchestratorService = new SunatOrchestratorService(
+    new SunatSignerService(),
+    new SunatSoapService(),
+  );
+
   async execute(data: CreateInvoiceInput) {
-    // 🚀 INICIALIZAMOS LA TRANSACCIÓN ACIDA GLOBAL
+    // 🚀 INICIALIZAMOS LA TRANSACCIÓN ÁCIDA GLOBAL
     const transaction = await sequelizeInstance.transaction();
 
     try {
@@ -48,7 +61,7 @@ export class CreateInvoiceUseCase {
           companyId: data.companyId,
         },
         transaction,
-        lock: transaction.LOCK.UPDATE, // Evita que otro cajero lea este mismo correlativo en paralelo
+        lock: transaction.LOCK.UPDATE, // Evita colisiones de lectura en paralelo
       });
 
       if (!seriesRow || !seriesRow.isActive) {
@@ -57,9 +70,7 @@ export class CreateInvoiceUseCase {
         );
       }
 
-      //********************************************************** */
       // Detectamos el tipo de documento que se está emitiendo en la cabecera
-      // Asume que tu objeto 'data.documentType' o 'seriesRow.documentType' guarda 'FACTURA', 'BOLETA' o 'NOTA_PEDIDO'
       const docType = String(seriesRow.documentType).trim().toUpperCase();
 
       // 🌟 REGLA DE AUDITORÍA CONTABLE: Solo descuentan stock los comprobantes de pago reales
@@ -118,7 +129,6 @@ export class CreateInvoiceUseCase {
           totalInafecta += subtotalValue;
           totalVenta += subtotalPrice;
         }
-
         // =========================================================================
         // 📦 MOTOR DE KARDEX: SEGUIMIENTO ULTRA-OPTIMO CON COLUMNA CACHÉ
         // =========================================================================
@@ -130,7 +140,7 @@ export class CreateInvoiceUseCase {
           include: [
             {
               model: AuxiliaryParameterModel,
-              as: "UnitMeasureParameter", // 🔥 Asegúrate de usar el alias exacto que definiste en tus asociaciones
+              as: "UnitMeasureParameter", // Alias relacional del catálogo paramétrico
               required: false,
               attributes: ["id", "code", "name"],
             },
@@ -143,7 +153,6 @@ export class CreateInvoiceUseCase {
           );
         }
 
-        //************************************************************* */
         // Leemos de forma ultra veloz la columna caché
         const currentStock = Number(productRow.get("stock") || 0);
 
@@ -165,10 +174,11 @@ export class CreateInvoiceUseCase {
         // El cortafuegos se activa si el código de la SUNAT es ZZ o la glosa contiene SERVICIO
         const isServiceItem =
           realUnitCode === "ZZ" || realUnitName.includes("SERVICIO");
-        // =========================================================================
 
-        console.log(realUnitCode);
-        console.log(realUnitName);
+        console.log(
+          `📦 [POS-UNIT] Evaluando: [${productRow.get("name")}] | Código SUNAT: [${realUnitCode}]`,
+        );
+
         // =========================================================================
         // 🛡️ CONDICIONAL ATÓMICO INVENTORY: Solo resta si es Factura o Boleta
         // =========================================================================
@@ -198,7 +208,7 @@ export class CreateInvoiceUseCase {
                 branchId: data.branchId,
                 productId: productRow.id,
                 movementType: "SALIDA",
-                sourceDocument: fullNumberStr, // Queda amarrado al ticket calculado arriba
+                sourceDocument: fullNumberStr, // Amarrado al ticket calculado arriba
                 quantity: qty,
                 previousStock: currentStock,
                 actualStock: calculatedFinalStock,
@@ -216,34 +226,38 @@ export class CreateInvoiceUseCase {
               `✨ [POS LOGÍSTICA] [${productRow.get("name")}] es un SERVICIO (${realUnitCode}). Ignorando control de existencias.`,
             );
           }
-          // =========================================================================
         } else {
           console.log(
             `📝 PRE-VENTA AUDIT - [${productRow.get("name")}] cotizado sin alterar existencias físicas.`,
           );
         }
 
+        // Estructuramos el payload contable exacto por cada ítem iterado
         processedDetails.push({
           productId: item.productId,
           productCode: item.productCode,
-          productName: item.productName,
+          productName: productRow.get("name"),
           unitMeasureCode: realUnitCode,
           quantity: qty,
-          unitPrice: priceWithIgv,
-          unitValue: valueWithoutIgv,
+
+          // 🎯 LAS TRES LLAVES MAESTRAS DE EMISIÓN: Sincronizan de corrido con las firmas del XML
+          precioConIgv: priceWithIgv,
+          valorSinIgv: valueWithoutIgv,
+          igvItem: subtotalIgv,
+
           taxTypeCode: item.taxTypeCode,
           taxPercentage: taxPercentage,
           subtotalValue: subtotalValue,
           subtotalIgv: subtotalIgv,
           subtotalPrice: subtotalPrice,
+          nombre: productRow.get("name"), // Clave requerida en el template
         });
-        //************************************************************* */
       }
+
       // =========================================================================
       // 5. Captura de marca de tiempo en la zona horaria del servidor
       // =========================================================================
       const now = new Date();
-      // Capturamos las cadenas de texto limpias evitando arreglos volátiles
       const localDate = now.toISOString().split("T")[0];
       const localTime = now.toTimeString().split(" ")[0];
 
@@ -284,7 +298,6 @@ export class CreateInvoiceUseCase {
         },
         { transaction },
       );
-
       // =========================================================================
       // 7. 💾 GUARDAR DETALLES EN BLOQUE VINCULADOS A LA CABECERA
       // =========================================================================
@@ -308,21 +321,39 @@ export class CreateInvoiceUseCase {
       await InvoiceDetailModel.bulkCreate(detailsRowsPayload, { transaction });
 
       // =========================================================================
-      // 8. 🎯 ACTUALIZAMOS EL CONTADOR DEL TALONARIO EN DISCO
+      // 11. 🎯 ACTUALIZAMOS EL CONTADOR DEL TALONARIO EN DISCO
       // =========================================================================
       await seriesRow.update({ currentNumber: nextNumber }, { transaction });
 
-      // 🏁 SI TODO MARCHÓ EN VERDE, CONSOLIDAMOS LOS DATOS EN MYSQL
+      // 🔥 INVOCACIÓN CENTRALIZADA: Un solo comando hace toda la magia
+      const sunatResult = await this.sunatOrchestratorService.processAndSend(headerRow, transaction);
+
+      // 🏁 CONSOLIDACIÓN INDESTRUCTIBLE EN MYSQL (AIVEN)
       await transaction.commit();
+
+
+      console.log(
+        `🏆 [TRANSACCIÓN EXITOSA] Comprobante ${fullNumberStr} procesado e indexado.`,
+      );
 
       return {
         id: headerRow.id,
         fullDocumentNumber: fullNumberStr,
         totalVenta: totalVenta,
+        sunat: {
+          success: sunatResult.success,
+          code: sunatResult.sunatResponseCode,
+          message: sunatResult.sunatDescription,
+          hash: sunatResult.digestValue,
+        },
       };
     } catch (error) {
-      // 💥 REBOTE AUTOMÁTICO: Si algo falló, se deshace todo rastro en la RAM del servidor
+      // 💥 REBOTE AUTOMÁTICO ACID: Si algo falló, se deshace todo rastro logístico y contable
       await transaction.rollback();
+      console.error(
+        "🚨 [CRASH TRANSACCIONAL INVOICE]: Rollback ejecutado en disco.",
+        error,
+      );
       throw error;
     }
   }
