@@ -10,6 +10,7 @@ export class AuxiliaryParameterModel extends Model {
   declare public name: string;
   declare public description: string | null;
   declare public isActive: boolean;
+  declare public documentFlag: string;
 }
 
 AuxiliaryParameterModel.init(
@@ -20,7 +21,12 @@ AuxiliaryParameterModel.init(
     code: { type: DataTypes.STRING(20), allowNull: false },
     name: { type: DataTypes.STRING(100), allowNull: false },
     description: { type: DataTypes.STRING(255), allowNull: true },
-    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }
+    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    documentFlag: {
+  type: DataTypes.STRING(10),
+  allowNull: false,
+  defaultValue: '0'
+}
   },
   {
     sequelize: sequelizeInstance,

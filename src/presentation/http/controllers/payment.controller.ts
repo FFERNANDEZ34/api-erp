@@ -2,6 +2,8 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { RegisterPaymentsUseCase } from '../../../application/use-cases/payments/register-payments';
 
+
+
 export class PaymentController {
   constructor(
     private readonly registerPaymentsUseCase: RegisterPaymentsUseCase

@@ -69,7 +69,7 @@ InvoiceHeaderModel.init(
     paymentStatus: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'PENDIENTE' },
     sunatStatus: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'PENDIENTE' },
     sunatResponseCode: { type: DataTypes.STRING(10), allowNull: true },
-    sunatDescription: { type: DataTypes.STRING(255), allowNull: true }
+    sunatDescription: { type: DataTypes.STRING(2000), allowNull: true }
   },
   {
     sequelize: sequelizeInstance,

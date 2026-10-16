@@ -8,9 +8,7 @@ import { DocumentSeriesModel } from "../../../infrastructure/database/models/doc
 import { ProductModel } from "../../../infrastructure/database/models/product.model";
 import { ProductKardexModel } from "../../../infrastructure/database/models/product-kardex.model";
 import { AuxiliaryParameterModel } from "../../../infrastructure/database/models/auxiliary-parameter.model";
-import { SunatOrchestratorService } from "../../../infrastructure/services/sunat-orchestrator.service";
-import { SunatSignerService } from "../../../infrastructure/services/sunat-signer.service";
-import { SunatSoapService } from "../../../infrastructure/services/sunat-soap.service";
+
 
 export interface InvoiceDetailInput {
   productId: number;
@@ -41,13 +39,7 @@ export interface CreateInvoiceInput {
 }
 
 export class CreateInvoiceUseCase {
-  // private signerService = new SunatSignerService();
-  // private soapService = new SunatSoapService();
-  private sunatOrchestratorService = new SunatOrchestratorService(
-    new SunatSignerService(),
-    new SunatSoapService(),
-  );
-
+  
   async execute(data: CreateInvoiceInput) {
     // 🚀 INICIALIZAMOS LA TRANSACCIÓN ÁCIDA GLOBAL
     const transaction = await sequelizeInstance.transaction();
@@ -244,7 +236,8 @@ export class CreateInvoiceUseCase {
           precioConIgv: priceWithIgv,
           valorSinIgv: valueWithoutIgv,
           igvItem: subtotalIgv,
-
+          unitPrice: priceWithIgv,
+          unitValue: valueWithoutIgv,
           taxTypeCode: item.taxTypeCode,
           taxPercentage: taxPercentage,
           subtotalValue: subtotalValue,
@@ -325,12 +318,8 @@ export class CreateInvoiceUseCase {
       // =========================================================================
       await seriesRow.update({ currentNumber: nextNumber }, { transaction });
 
-      // 🔥 INVOCACIÓN CENTRALIZADA: Un solo comando hace toda la magia
-      const sunatResult = await this.sunatOrchestratorService.processAndSend(headerRow, transaction);
-
       // 🏁 CONSOLIDACIÓN INDESTRUCTIBLE EN MYSQL (AIVEN)
       await transaction.commit();
-
 
       console.log(
         `🏆 [TRANSACCIÓN EXITOSA] Comprobante ${fullNumberStr} procesado e indexado.`,
@@ -341,10 +330,11 @@ export class CreateInvoiceUseCase {
         fullDocumentNumber: fullNumberStr,
         totalVenta: totalVenta,
         sunat: {
-          success: sunatResult.success,
-          code: sunatResult.sunatResponseCode,
-          message: sunatResult.sunatDescription,
-          hash: sunatResult.digestValue,
+          success: false,
+          code: "OFFLINE",
+          message:
+            "Comprobante generado localmente. Pendiente de pago para timbrado fiscal y envío a SUNAT.",
+          hash: null, // El hash nacerá formalmente en el caso de uso de pagos
         },
       };
     } catch (error) {

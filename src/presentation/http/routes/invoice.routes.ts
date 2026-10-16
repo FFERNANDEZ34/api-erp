@@ -5,43 +5,36 @@ import { GetInvoicesPaginatedUseCase } from "../../../application/use-cases/invo
 import { CancelInvoiceUseCase } from "../../../application/use-cases/invoices/cancel-invoice";
 import { DownloadXmlUseCase } from "../../../application/use-cases/invoices/download-xml.use-case";
 import { RetrySunatUseCase } from "../../../application/use-cases/invoices/retry-sunat.use-case";
+import { GetInvoiceByIdUseCase } from "../../../application/use-cases/invoices/get-invoice-by-id"; 
 
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import { checkExchangeRateMiddleware } from "../../middlewares/check-exchange-rate.middleware";
 
-import { SunatSignerService } from "../../../infrastructure/services/sunat-signer.service";
-import { SunatSoapService } from "../../../infrastructure/services/sunat-soap.service"; 
+// 🎯 ÚNICA IMPORTACIÓN DE INFRAESTRUCTURA FISCAL REQUERIDA
 import { SunatOrchestratorService } from "../../../infrastructure/services/sunat-orchestrator.service";
-
-import { GetInvoiceByIdUseCase } from "../../../application/use-cases/invoices/get-invoice-by-id"; // 🚀 Importación obligatoria
-
 
 const invoiceRouter = Router();
 
 // =========================================================================
-// 🚀 INICIALIZACIÓN DE SERVICIOS DE INFRAESTRUCTURA FISCAL
+// 📡 INICIALIZACIÓN DEL ORQUESTADOR UNIFICADO (.NET 9)
 // =========================================================================
-const sunatSignerService = new SunatSignerService();
-const sunatSoapService = new SunatSoapService(); // 🎯 Instanciamos el servicio SOAP core real
-
-// Registramos el orquestador central que amarra el firmado con el flag y el disparo HTTPS
-const sunatOrchestratorService = new SunatOrchestratorService(sunatSignerService, sunatSoapService);
+const sunatOrchestratorService = new SunatOrchestratorService();
 
 // =========================================================================
 // 🧱 INYECCIÓN DE CASOS DE USO (CLEAN ARCHITECTURE)
 // =========================================================================
-// Pasamos el orquestador unificado a la creación para centralizar el flujo DRY
 const createInvoiceUseCase = new CreateInvoiceUseCase(); 
 const getInvoicesPaginatedUseCase = new GetInvoicesPaginatedUseCase();
 const cancelInvoiceUseCase = new CancelInvoiceUseCase();
 const getInvoiceByIdUseCase = new GetInvoiceByIdUseCase(); 
-
 const downloadXmlUseCase = new DownloadXmlUseCase();
+
+// El caso de reintento se alimenta de forma limpia de nuestro orquestador
 const retrySunatUseCase = new RetrySunatUseCase(sunatOrchestratorService);
 
 // =========================================================================
 // 🎛️ INYECCIÓN INTEGRAL EN EL CONTROLADOR DE EXPRESIONES
-// Sincronizamos los 5 Casos de Uso según el orden exacto de tu constructor
+// Sincronizamos los Casos de Uso según el orden exacto de tu constructor
 // =========================================================================
 const invoiceController = new InvoiceController(
   createInvoiceUseCase,
@@ -61,8 +54,7 @@ invoiceRouter.get("/", authMiddleware, checkExchangeRateMiddleware, (req: any, r
 invoiceRouter.delete("/:id", authMiddleware, checkExchangeRateMiddleware, (req: any, res: any) => invoiceController.cancel(req, res));
 invoiceRouter.get("/:id", authMiddleware, (req: any, res: any) => invoiceController.getById(req, res));
 
-
-
+// Endpoints de contingencia y descargas
 invoiceRouter.post("/:id/retry-sunat", authMiddleware, (req: any, res: any) => invoiceController.retrySunat(req, res));
 invoiceRouter.get("/:id/download-xml", authMiddleware, (req: any, res: any) => invoiceController.downloadXml(req, res));
 

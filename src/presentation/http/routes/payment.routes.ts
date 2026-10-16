@@ -2,20 +2,28 @@ import { Router } from 'express';
 import { RegisterPaymentsUseCase } from '../../../application/use-cases/payments/register-payments';
 import { PaymentController } from '../controllers/payment.controller';
 
-// 🎯 IMPORTACIONES CORREGIDAS: Jalamos los middlewares desde su carpeta real en presentation
+// 🎯 Middlewares nativos de tu capa de presentación
 import { uploadVoucherMiddleware } from '../../middlewares/upload.middleware';
 import { authMiddleware } from '../../middlewares/auth.middleware';
+import { catchAsync } from '../../middlewares/async-handler.middleware';
 
-import { catchAsync } from '../../middlewares/async-handler.middleware'; // Ajusta según tu async-handler
+// 🎯 ÚNICA IMPORTACIÓN DE INFRAESTRUCTURA FISCAL REQUERIDA:
+import { SunatOrchestratorService } from "../../../infrastructure/services/sunat-orchestrator.service";
 
 const paymentRouter = Router();
 
-const registerPaymentsUseCase = new RegisterPaymentsUseCase();
-const paymentController = new PaymentController(registerPaymentsUseCase);
-
+// Bloqueamos la arteria completa de pagos bajo el middleware de sesión JWT del ERP
 paymentRouter.use(authMiddleware);
 
-// Inyección atómica del capturador de archivos Multer en la arteria de red
+// =========================================================================
+// 🎯 INVERSIÓN DE DEPENDENCIAS EN CASCADA (Clean Architecture)
+// Instanciamos únicamente el nuevo orquestador conectado a .NET 9
+// =========================================================================
+const sunatOrchestratorService = new SunatOrchestratorService();
+const registerPaymentsUseCase = new RegisterPaymentsUseCase(sunatOrchestratorService);
+const paymentController = new PaymentController(registerPaymentsUseCase);
+
+// 📥 API ATÓMICA: Captura Multipart con Multer y despacha la recaudación
 paymentRouter.post(
   '/', 
   uploadVoucherMiddleware.single('evidenceFile'), 
