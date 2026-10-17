@@ -100,16 +100,20 @@ export class CreateInvoiceUseCase {
         if (item.taxTypeCode === "10") {
           // Operación Gravada Comercial Estándar (18%)
           taxPercentage = 18.0;
-          valueWithoutIgv = priceWithIgv / 1.18; // Desglosamos el valor neto
-          itemIgv = priceWithIgv - valueWithoutIgv;
+          
+          // 🎯 REDONDEO 1: El valor unitario sin IGV exige precisión de 4 decimales según SUNAT
+          valueWithoutIgv = Number((priceWithIgv / 1.18).toFixed(4)); 
+          itemIgv = Number((priceWithIgv - valueWithoutIgv).toFixed(4));
         }
 
-        // Totales calculados con precisión por cantidad de ítems
-        const subtotalValue = valueWithoutIgv * qty;
-        const subtotalIgv = itemIgv * qty;
-        const subtotalPrice = priceWithIgv * qty;
+        // 🎯 REDONDEO 2: Los subtotales de línea que se acumulan en el total e impactan la BD
+        // Se calculan de forma estricta redondeando el cuarto decimal en caliente
+        const subtotalValue = Number((valueWithoutIgv * qty).toFixed(4));
+        const subtotalIgv = Number((itemIgv * qty).toFixed(4));
+        const subtotalPrice = Number((priceWithIgv * qty).toFixed(2)); // Los precios totales finales siempre van a 2 decimales
 
-        // Acumulación en matrices según catálogo de afectación SUNAT
+        // 🎯 ACUMULACIÓN SOBRE VALORES CRISTALIZADOS: 
+        // Sumamos al encabezado los montos exactos que físicamente guardará MySQL
         if (item.taxTypeCode === "10") {
           totalGravada += subtotalValue;
           totalIgv += subtotalIgv;
@@ -121,18 +125,18 @@ export class CreateInvoiceUseCase {
           totalInafecta += subtotalValue;
           totalVenta += subtotalPrice;
         }
+
         // =========================================================================
         // 📦 MOTOR DE KARDEX: SEGUIMIENTO ULTRA-OPTIMO CON COLUMNA CACHÉ
         // =========================================================================
-        // A. Buscamos el producto en la BD bloqueando su fila contra compras concurrentes
         const productRow = await ProductModel.findOne({
           where: { id: item.productId, subscriptionId: data.subscriptionId },
           transaction,
-          lock: transaction.LOCK.UPDATE, // Evita colisiones por doble venta simultánea
+          lock: transaction.LOCK.UPDATE,
           include: [
             {
               model: AuxiliaryParameterModel,
-              as: "UnitMeasureParameter", // Alias relacional del catálogo paramétrico
+              as: "UnitMeasureParameter",
               required: false,
               attributes: ["id", "code", "name"],
             },
@@ -140,99 +144,42 @@ export class CreateInvoiceUseCase {
         });
 
         if (!productRow) {
-          throw new Error(
-            `El producto [${item.productName}] no existe en el catálogo general del holding.`,
-          );
+          throw new Error(`El producto [${item.productName}] no existe en el catálogo.`);
         }
 
-        // Leemos de forma ultra veloz la columna caché
         const currentStock = Number(productRow.get("stock") || 0);
+        const realUnitCode = String(productRow.UnitMeasureParameter?.code || "NIU").toUpperCase().trim();
+        const realUnitName = String(productRow.UnitMeasureParameter?.name || "UNIDADES").toUpperCase().trim();
+        const isServiceItem = realUnitCode === "ZZ" || realUnitName.includes("SERVICIO");
 
-        // =========================================================================
-        // 🎯 EL DESTRABE ABSOLUTO MÁSTER: LEEMOS LA UNIDAD DIRECTO DE MYSQL (AIVEN)
-        // Extraemos el código real ('ZZ' o 'NIU') guardado en la base de datos
-        // =========================================================================
-        const realUnitCode = String(
-          productRow.UnitMeasureParameter?.code || "NIU",
-        )
-          .toUpperCase()
-          .trim();
-        const realUnitName = String(
-          productRow.UnitMeasureParameter?.name || "UNIDADES",
-        )
-          .toUpperCase()
-          .trim();
-
-        // El cortafuegos se activa si el código de la SUNAT es ZZ o la glosa contiene SERVICIO
-        const isServiceItem =
-          realUnitCode === "ZZ" || realUnitName.includes("SERVICIO");
-
-        console.log(
-          `📦 [POS-UNIT] Evaluando: [${productRow.get("name")}] | Código SUNAT: [${realUnitCode}]`,
-        );
-
-        // =========================================================================
-        // 🛡️ CONDICIONAL ATÓMICO INVENTORY: Solo resta si es Factura o Boleta
-        // =========================================================================
-        if (shouldAffectInventory) {
-          // 📦 CASO A: SI ES UN BIEN FÍSICO (TANGIBLE), APLICAMOS CONTROL LOGÍSTICO ESTRICTO
-          if (!isServiceItem) {
-            // Evaluamos disponibilidad en tiempo real
-            if (currentStock < qty) {
-              throw new Error(
-                `Stock insuficiente para [${productRow.get("name")}]. Saldo en almacén: ${currentStock}, Solicitado: ${qty}`,
-              );
-            }
-
-            const calculatedFinalStock = currentStock - qty;
-
-            // C. RESTA ATÓMICA: Actualizamos la columna caché de saldos en disco de forma instantánea
-            await productRow.update(
-              { stock: calculatedFinalStock },
-              { transaction },
-            );
-
-            // D. TRAZABILIDAD: Insertamos el registro inmutable en el Kardex para auditorías
-            await ProductKardexModel.create(
-              {
-                subscriptionId: data.subscriptionId,
-                companyId: data.companyId,
-                branchId: data.branchId,
-                productId: productRow.id,
-                movementType: "SALIDA",
-                sourceDocument: fullNumberStr, // Amarrado al ticket calculado arriba
-                quantity: qty,
-                previousStock: currentStock,
-                actualStock: calculatedFinalStock,
-              },
-              { transaction },
-            );
-
-            console.log(
-              `📦 KARDEX SINCRO - [${productRow.get("name")}] restado con éxito. Nuevo saldo: ${calculatedFinalStock}`,
-            );
-          } else {
-            // ⚡ CASO B: ES UN SERVICIO INTANGIBLE
-            // Omitimos la resta de inventarios y el Kárdex en frío, dándole luz verde inmediata
-            console.log(
-              `✨ [POS LOGÍSTICA] [${productRow.get("name")}] es un SERVICIO (${realUnitCode}). Ignorando control de existencias.`,
-            );
+        if (shouldAffectInventory && !isServiceItem) {
+          if (currentStock < qty) {
+            throw new Error(`Stock insuficiente para [${productRow.get("name")}]. Saldo: ${currentStock}, Solicitado: ${qty}`);
           }
-        } else {
-          console.log(
-            `📝 PRE-VENTA AUDIT - [${productRow.get("name")}] cotizado sin alterar existencias físicas.`,
-          );
+
+          const calculatedFinalStock = currentStock - qty;
+          await productRow.update({ stock: calculatedFinalStock }, { transaction });
+
+          await ProductKardexModel.create({
+            subscriptionId: data.subscriptionId,
+            companyId: data.companyId,
+            branchId: data.branchId,
+            productId: productRow.id,
+            movementType: "SALIDA",
+            sourceDocument: fullNumberStr,
+            quantity: qty,
+            previousStock: currentStock,
+            actualStock: calculatedFinalStock,
+          }, { transaction });
         }
 
-        // Estructuramos el payload contable exacto por cada ítem iterado
+        // Estructuramos el payload contable exacto con los números fijos redondeados
         processedDetails.push({
           productId: item.productId,
           productCode: item.productCode,
           productName: productRow.get("name"),
           unitMeasureCode: realUnitCode,
           quantity: qty,
-
-          // 🎯 LAS TRES LLAVES MAESTRAS DE EMISIÓN: Sincronizan de corrido con las firmas del XML
           precioConIgv: priceWithIgv,
           valorSinIgv: valueWithoutIgv,
           igvItem: subtotalIgv,
@@ -240,12 +187,18 @@ export class CreateInvoiceUseCase {
           unitValue: valueWithoutIgv,
           taxTypeCode: item.taxTypeCode,
           taxPercentage: taxPercentage,
+          
+          // 🎯 ENGRANAJE PERFECTO EN BD: Valores totalmente cuadrados a nivel de hardware/disco
           subtotalValue: subtotalValue,
           subtotalIgv: subtotalIgv,
           subtotalPrice: subtotalPrice,
-          nombre: productRow.get("name"), // Clave requerida en el template
+          nombre: productRow.get("name"), 
         });
       }
+
+      totalGravada = Number(totalGravada.toFixed(2));
+      totalIgv = Number(totalIgv.toFixed(2));
+      totalVenta = Number(totalVenta.toFixed(2));
 
       // =========================================================================
       // 5. Captura de marca de tiempo en la zona horaria del servidor
