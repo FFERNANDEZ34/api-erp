@@ -1,33 +1,33 @@
 import express from "express";
 import dotenv from "dotenv";
-
 import cors from "cors";
 
-import { userRouter } from "./presentation/http/routes/user.routes";
-import { errorMiddleware } from "./presentation/middlewares/error.middleware";
-import { companyRouter } from "./presentation/http/routes/company.routes";
-import { entityRouter } from "./presentation/http/routes/entity.routes";
-import { menuRouter } from "./presentation/http/routes/menu.routes";
-import { sequelizeInstance } from "./infrastructure/database/sequelize.config";
-import { productRouter } from "./presentation/http/routes/product.routes";
-import { exchangeRouter } from "./presentation/http/routes/exchange.routes";
-import { checkExchangeRateMiddleware } from "./presentation/middlewares/check-exchange-rate.middleware";
-import { authMiddleware } from "./presentation/middlewares/auth.middleware";
-import { branchRouter } from "./presentation/http/routes/branch.routes";
-import { seriesRouter } from "./presentation/http/routes/series.routes";
-import { attachmentRouter } from "./presentation/http/routes/attachment.routes";
-import { invoiceRouter } from "./presentation/http/routes/invoice.routes";
-import { kardexRouter } from "./presentation/http/routes/kardex.routes";
-import { paymentRouter } from "./presentation/http/routes/payment.routes";
-import { dashboardRouter } from "./presentation/http/routes/dashboard.routes"; 
-import { securityRouter } from "./presentation/http/routes/security.routes"; 
-import { adminRouter } from "./presentation/http/routes/admin.routes"; 
+import { userRouter } from "./presentation/http/routes/user.routes.js";
+import { errorMiddleware } from "./presentation/middlewares/error.middleware.js";
+import { companyRouter } from "./presentation/http/routes/company.routes.js";
+import { entityRouter } from "./presentation/http/routes/entity.routes.js";
+import { menuRouter } from "./presentation/http/routes/menu.routes.js";
+import { sequelizeInstance } from "./infrastructure/database/sequelize.config.js";
+import { productRouter } from "./presentation/http/routes/product.routes.js";
+import { exchangeRouter } from "./presentation/http/routes/exchange.routes.js";
+import { checkExchangeRateMiddleware } from "./presentation/middlewares/check-exchange-rate.middleware.js";
+import { authMiddleware } from "./presentation/middlewares/auth.middleware.js";
+import { branchRouter } from "./presentation/http/routes/branch.routes.js";
+import { seriesRouter } from "./presentation/http/routes/series.routes.js";
+import { attachmentRouter } from "./presentation/http/routes/attachment.routes.js";
+import { invoiceRouter } from "./presentation/http/routes/invoice.routes.js";
+import { kardexRouter } from "./presentation/http/routes/kardex.routes.js";
+import { paymentRouter } from "./presentation/http/routes/payment.routes.js";
+import { dashboardRouter } from "./presentation/http/routes/dashboard.routes.js"; 
+import { securityRouter } from "./presentation/http/routes/security.routes.js"; 
+import { adminRouter } from "./presentation/http/routes/admin.routes.js"; 
 
 
 
 import path from "path";
 
 dotenv.config();
+
 
 const app = express();
 
