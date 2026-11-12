@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 3000
 
 # Ejecutamos directamente con Node 24 nativo (soporta TypeScript sin configurar nada)
-CMD ["node", "src/server.ts"]
+CMD ["npx", "tsx", "src/server.ts"]
