@@ -31,9 +31,14 @@ dotenv.config();
 
 const app = express();
 
+const allowedOrigins = [
+  "http://localhost:4200",
+  process.env.FRONTEND_URL,
+].filter(Boolean) as string[];
+
 app.use(
   cors({
-    origin: "http://localhost:4200", // Permite que tu Angular se conecte
+    origin: allowedOrigins, // Permite que tu Angular se conecte
     credentials: true,
   }),
 );
